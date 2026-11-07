@@ -246,11 +246,15 @@ what comes next.
 - **It runs NixOS:** go to L6. The first `apply.sh` copies the machine's own
   `/etc/nixos` into the folder (`nixos/`), so its boot loader, disks and
   other settings stay, and the machine stays on the NixOS release it runs
-  (such as 26.05). Ask the user to check that copy holds nothing private
-  before they push the folder anywhere. From then on each `apply.sh` puts
-  the folder in `/etc/nixos` (the old one is kept as
+  (such as 26.05, read from root's channel). If `apply.sh` cannot tell the
+  release, it stops; ask the user which one and pass `--nixos-branch
+  nixos-26.05` (or `nixos-unstable`). Ask the user to check that copy holds
+  nothing private before they push the folder anywhere. From then on each
+  `apply.sh` puts the folder in `/etc/nixos` (the old one is kept as
   `/etc/nixos.before-headless`), so `nixos-rebuild switch` and automatic
-  updates at the machine build the same setup.
+  updates at the machine build the same setup; an automatic update takes
+  the newest nixpkgs of the machine's release, and `apply.sh` keeps that
+  newer one and writes it into the folder's `flake.lock` to commit.
 - **Any other distribution:** offer to **replace it with NixOS**, using
   nixos-anywhere. Say plainly: this **erases the whole disk**, everything on
   it is gone, and it needs Nix on this computer, an x86_64 or aarch64

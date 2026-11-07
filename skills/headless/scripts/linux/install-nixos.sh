@@ -80,12 +80,15 @@ read_password
 
 # The address this computer reaches the machine at. One the machine set
 # itself (not from DHCP) goes into network.nix, so the new system keeps it;
-# a DHCP address comes back from DHCP.
+# a DHCP address comes back from DHCP. Anything else (IPv6, or an address
+# on a bridge, bond or VLAN rather than the network card itself) stops here,
+# before the disk is touched: the new system might not come back at it.
 # shellcheck disable=SC2016 # runs on the machine
 net="$(on 'set -- $SSH_CONNECTION; a="$3"
   line="$(ip -4 -o addr show | awk -v a="$a" "{ split(\$4, p, \"/\"); if (p[1] == a) print }" | head -n 1)"
-  [ -n "$line" ] || exit 0
+  [ -n "$line" ] || { echo unknown; exit 0; }
   dev="$(printf "%s\n" "$line" | awk "{ print \$2 }")"
+  [ -e "/sys/class/net/$dev/device" ] || { echo "virtual $dev"; exit 0; }
   case "$line" in *" dynamic"*) echo dhcp; exit 0 ;; esac
   echo "static $(printf "%s\n" "$line" | awk "{ print \$4 }") $(cat "/sys/class/net/$dev/address")"
   ip -4 route show default dev "$dev" | awk "/^default via/ { print \"gateway \" \$3; exit }"
@@ -119,7 +122,8 @@ NIX
     "${NIXF[@]}" eval --json --file "$CONFIG/network.nix" > /dev/null || die "could not write $CONFIG/network.nix"
     say "$ADDRESS has a fixed address ($cidr${gw:+, gateway $gw}); the new system keeps it (network.nix)" ;;
   dhcp) say "$ADDRESS's address comes from DHCP; the new system asks DHCP again" ;;
-  *) say "could not tell where $ADDRESS's address comes from; the new system asks DHCP" ;;
+  virtual\ *) die "$ADDRESS is on ${net#virtual }, a bridge, bond, VLAN or other virtual network device, which install-nixos.sh does not carry over; nothing was changed. Reach the machine at an IPv4 address on its network card, or install NixOS by hand" ;;
+  *) die "could not tell where $ADDRESS's address comes from (install-nixos.sh carries over an IPv4 address on the machine's network card); nothing was changed. Reach the machine at such an address, or install NixOS by hand" ;;
 esac
 if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
 if [ -n "$SOURCE" ]; then

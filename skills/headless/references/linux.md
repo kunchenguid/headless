@@ -29,7 +29,7 @@ the module's options (`modules/nixos/headless.nix`, exported as
 | `autoLogin` | `true` | The account's session starts at boot (systemd lingering), so its user services run with nobody signed in. Nothing signs in on a screen. |
 | `tailscale.enable` | `false` | Run the Tailscale daemon (on the script path, from Tailscale's own signed package repository). |
 | `extras.neverSleep` | `true` | Sleep, suspend and hibernate are masked. |
-| `extras.autoUpdates` | `true` | Script path: unattended-upgrades (apt) or dnf5-automatic applying updates. NixOS: nothing; updates come from the config folder, or from the machine's own `system.autoUpgrade`, which builds the same setup. |
+| `extras.autoUpdates` | `true` | Script path: unattended-upgrades (apt) or dnf5-automatic applying updates. NixOS: nothing; updates come from the config folder, or from the machine's own `system.autoUpgrade`, which first moves the config's nixpkgs to the newest revision of the machine's release, then builds the same setup. |
 
 Always on: SSH ends sessions whose other end is gone after about three
 minutes, and `/etc/headless/settings.env` records what the machine should
@@ -54,8 +54,13 @@ folder anywhere.
 
 The machine stays on the NixOS release it runs: the folder's `flake.nix`
 follows that release's nixpkgs branch (`nixos-26.05` on a 26.05 machine,
-`nixos-unstable` on unstable). Moving to a newer release is the user's
-choice: change that line and run `apply.sh`.
+`nixos-unstable` on unstable). `apply.sh` reads it on the machine, from
+root's `nixos` channel, and checks that the version the machine runs
+matches it (`26.05.…` for `nixos-26.05`, `26.11pre…` for
+`nixos-unstable`). When there is no channel or they disagree it stops;
+run it again with `--nixos-branch nixos-26.05` (or the branch the user
+names). Moving to a newer release is the user's choice: change that line
+and run `apply.sh`.
 
 After each switch `apply.sh` writes the folder to the machine's
 `/etc/nixos`, with a `HEADLESS.md` saying so; the first time, the old
@@ -63,9 +68,16 @@ folder moves to `/etc/nixos.before-headless`. So `sudo nixos-rebuild
 switch` at the machine, and `system.autoUpgrade` if the machine's own
 config turns it on, build the skill's setup instead of the older
 `configuration.nix` alone (the module points `system.autoUpgrade.flake` at
-`/etc/nixos#machine`; the flake also answers to the host name). Edits
-made in `/etc/nixos` are replaced at the next apply; make them in the
-config folder. If `/etc/nixos` is
+`/etc/nixos#machine`; the flake also answers to the host name). The
+automatic update first moves the flake's `nixpkgs` input to the newest
+revision of its branch, so the machine keeps taking security fixes on its
+own release. When the machine's `flake.lock` holds a newer nixpkgs of the
+same branch than the folder's, `apply.sh` keeps the newer one (it never
+takes the machine back) and writes it into the folder's `flake.lock` to
+commit. `/etc/nixos` gets the folder as soon as the new system is the boot
+default, even if the switch then reports errors. Other edits made in
+`/etc/nixos` are replaced at the next apply; make them in the config
+folder. If `/etc/nixos` is
 already a flake, `apply.sh` stops: put that flake in the config folder
 instead (its `flake.nix` at the top), add `headless.nixosModules.headless`
 to it and expose the host as `nixosConfigurations.machine` ("Your own
@@ -97,7 +109,8 @@ install, and restart. What carries over:
   into `network.nix` for that network card (matched by its hardware
   address), so the new system comes up at the same address. A DHCP address
   comes from DHCP again (a router that hands out addresses by MAC gives it
-  the same one);
+  the same one). Any other address, IPv6 or one on a bridge, bond or
+  VLAN, stops the script before the disk is touched;
 - the account's password (its hash, in a root-only file the new system
   reads when it makes the account) and the user's key.
 

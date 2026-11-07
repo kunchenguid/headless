@@ -100,6 +100,15 @@ in
     # machine's own updates (system.autoUpgrade, or nixos-rebuild switch at
     # the machine) build the same system instead of an older configuration.
     system.autoUpgrade.flake = lib.mkDefault "/etc/nixos#machine";
+    # With a flake, nixos-rebuild's --upgrade does nothing: the update first
+    # moves the flake's nixpkgs input to the newest revision of its branch,
+    # so the machine keeps taking security fixes on its own release.
+    system.autoUpgrade.upgrade = lib.mkDefault false;
+    systemd.services.nixos-upgrade.preStart = lib.mkIf
+      (config.system.autoUpgrade.enable && config.system.autoUpgrade.flake == "/etc/nixos#machine") ''
+        ${config.nix.package}/bin/nix --extra-experimental-features 'nix-command flakes' \
+          flake update nixpkgs --flake path:/etc/nixos
+      '';
 
     # SSH is the only way in. End sessions whose other end is gone after
     # about three minutes, so they never fill the connection limit.

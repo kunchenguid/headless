@@ -3,8 +3,12 @@
 # comes from the store each time, for sudo -S on the machine; the machine
 # keeps no passwordless admin rule.
 #
-# usage: apply.sh DIR [--headless-source PATH]
+# usage: apply.sh DIR [--headless-source PATH] [--nixos-branch BRANCH]
 #
+#   --nixos-branch BRANCH   the nixpkgs branch a machine that already runs
+#                           NixOS follows (nixos-26.05, nixos-unstable), when
+#                           apply.sh cannot read it on the machine (first run
+#                           only)
 #   --headless-source PATH  build against this checkout of the headless
 #                           flake instead of the one flake.lock pins (NixOS
 #                           only; for trying changes to the module itself)
@@ -23,16 +27,19 @@
 . "$(dirname "$0")/lib.sh"
 load_config "${1-}"
 shift
-SOURCE=""
+SOURCE="" BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --headless-source) SOURCE="$(cd "${2:?--headless-source needs a path}" && pwd)"; shift 2 ;;
+    --nixos-branch) BRANCH="${2-}"; shift 2 ;;
     *) die "unknown option $1" ;;
   esac
 done
 need_key
 settings_env > /dev/null || exit 1
-set -- "$CONFIG" ${SOURCE:+--headless-source "$SOURCE"}
+[ -z "$BRANCH" ] || [[ "$BRANCH" =~ ^nixos-(unstable|[0-9][0-9]\.[0-9][0-9])(-small)?$ ]] \
+  || die "--nixos-branch takes a NixOS branch such as nixos-26.05 or nixos-unstable"
+set -- "$CONFIG" ${SOURCE:+--headless-source "$SOURCE"} ${BRANCH:+--nixos-branch "$BRANCH"}
 with_secrets "$@"
 read_password
 kind="$(os_kind)"
@@ -78,19 +85,24 @@ NIX
   if grep -q '^  disk = "' "$CONFIG/system.nix"; then
     cp "$ASSETS/flake.nix" "$CONFIG/flake.nix"
   else
-    # A machine that already ran NixOS stays on its own release: the
-    # nixpkgs branch it runs now (such as nixos-26.05), or nixos-unstable.
+    # A machine that already ran NixOS stays on its own release, read on
+    # the machine: root's nixos channel, which the version it runs must
+    # match (a release such as 26.05.1234.abcdef, or 26.11pre1234.abcdef on
+    # unstable). When they disagree or there is no channel, it stops.
     version="$(on 'cat /run/current-system/nixos-version')"
-    release="$(printf '%s' "$version" | sed -n 's/^\([0-9][0-9]\.[0-9][0-9]\).*/\1/p')"
-    [ -n "$release" ] || die "could not read $ADDRESS's NixOS release (nixos-version says '$version')"
-    branch=nixos-unstable
-    if command -v git > /dev/null; then
-      ! git ls-remote --exit-code --heads https://github.com/NixOS/nixpkgs "nixos-$release" > /dev/null || branch="nixos-$release"
-    elif curl -fsS -o /dev/null "https://api.github.com/repos/NixOS/nixpkgs/branches/nixos-$release" 2> /dev/null; then
-      branch="nixos-$release"
+    branch="$BRANCH"
+    if [ -z "$branch" ]; then
+      channel="$(as_root '/run/current-system/sw/bin/nix-channel --list' | sed -n 's|^nixos [^ ]*/\(nixos-[0-9a-z.-]*\)/*$|\1|p' | head -n 1)"
+      case "$channel" in
+        nixos-unstable | nixos-unstable-small) [[ "$version" =~ ^[0-9][0-9]\.[0-9][0-9]pre ]] && branch="$channel" ;;
+        nixos-[0-9][0-9].[0-9][0-9] | nixos-[0-9][0-9].[0-9][0-9]-small)
+          r="${channel#nixos-}"
+          r="${r%-small}"
+          [[ "$version" == "$r."* ]] && branch="$channel" ;;
+      esac
+      [ -n "$branch" ] || die "could not tell which NixOS release $ADDRESS follows (it runs $version; root's nixos channel is ${channel:-not set}); run apply.sh again with --nixos-branch and the branch it should stay on, such as nixos-26.05 or nixos-unstable"
     fi
-    awk -v branch="$branch" '$0 == "    nixpkgs.follows = \"headless/nixpkgs-nixos\";" {
-        print "    # The NixOS release this machine ran before the headless skill."
+    awk -v branch="$branch" '$0 == "    nixpkgs.url = \"github:NixOS/nixpkgs/nixos-unstable\";" {
         print "    nixpkgs.url = \"github:NixOS/nixpkgs/" branch "\";"
         next
       } { print }' "$ASSETS/flake.nix" > "$CONFIG/flake.nix"
@@ -110,6 +122,18 @@ if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" ad
 say "copying $CONFIG to $ADDRESS"
 tar_c -C "$CONFIG" --exclude .git --exclude known_hosts . \
   | on 'rm -rf ~/.headless/config && mkdir -p -m 0700 ~/.headless/config && tar -xf - -C ~/.headless/config'
+# The machine's own updates move nixpkgs in /etc/nixos/flake.lock to newer
+# revisions of the same branch; apply keeps the newer one instead of going
+# back to the folder's, and writes it into the folder.
+# shellcheck disable=SC2016 # runs on the machine
+if [ -f "$CONFIG/flake.lock" ] && [ "$(on 'f="$HOME/.headless/config/flake.lock"
+  [ -f /etc/nixos/HEADLESS.md ] && [ -f /etc/nixos/flake.lock ] || exit 0
+  out="$('"$NIXOS_NIX"' eval --raw --impure --expr "import $HOME/.headless/remote/newer-nixpkgs.nix \"$f\" \"/etc/nixos/flake.lock\"")"
+  [ -z "$out" ] || { printf "%s\n" "$out" > "$f" && echo newer; }')" = newer ]; then
+  on 'cat ~/.headless/config/flake.lock' > "$CONFIG/flake.lock.new" && mv "$CONFIG/flake.lock.new" "$CONFIG/flake.lock" \
+    || die "could not copy the machine's flake.lock into $CONFIG"
+  say "kept the newer nixpkgs $ADDRESS updated to by itself; wrote it into $CONFIG/flake.lock, commit it"
+fi
 if [ -n "$SOURCE" ]; then
   tar_c -C "$SOURCE" --exclude .git . \
     | on 'rm -rf ~/.headless/source && mkdir -p -m 0700 ~/.headless/source && tar -xf - -C ~/.headless/source'

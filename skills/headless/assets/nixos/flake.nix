@@ -2,8 +2,11 @@
   description = "A headless NixOS machine, set up by the headless skill";
 
   inputs = {
+    # The NixOS release this machine follows. The machine's own updates
+    # (system.autoUpgrade) move this input to the newest revision of it.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     headless.url = "github:kunchenguid/headless";
-    nixpkgs.follows = "headless/nixpkgs-nixos";
+    headless.inputs.nixpkgs-nixos.follows = "nixpkgs";
     disko.follows = "headless/disko";
   };
 
