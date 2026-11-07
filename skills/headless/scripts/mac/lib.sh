@@ -39,6 +39,12 @@ load_config() {
   [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "ADDRESS in headless.env is not a plain address"
   [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "LOGIN in headless.env is not a plain account name"
   [ -f "$SSH_KEY" ] && [ -f "$SSH_KEY.pub" ] || die "SSH_KEY $SSH_KEY or its .pub is missing"
+  # Every step signs in without prompts, so a key with a passphrase must be
+  # loaded in ssh-agent.
+  if ! ssh-keygen -y -P '' -f "$SSH_KEY" > /dev/null 2>&1 \
+    && ! ssh-add -L 2> /dev/null | grep -qF "$(cut -d' ' -f2 < "$SSH_KEY.pub")"; then
+    die "$SSH_KEY has a passphrase and is not loaded in ssh-agent; run: ssh-add $SSH_KEY (on a Mac: ssh-add --apple-use-keychain $SSH_KEY)"
+  fi
   [ -n "$PASSWORD_REF" ] || die "PASSWORD_REF in headless.env is empty"
   KNOWN_HOSTS="$CONFIG/known_hosts"
   SSH_OPTS=(-o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" -o StrictHostKeyChecking=yes
@@ -50,11 +56,9 @@ load_config() {
 on() { ssh "${SSH_OPTS[@]}" "$LOGIN@$ADDRESS" "$@"; }
 
 # key_works: true when key sign-in works. need_key: stop unless it does.
-# Key sign-in runs without prompts, so a key with a passphrase must be
-# loaded in ssh-agent first.
 key_works() { [ -s "$KNOWN_HOSTS" ] && on true > /dev/null 2>&1; }
 need_key() {
-  key_works || die "key sign-in to $LOGIN@$ADDRESS does not work. Run connect.sh first; if your key has a passphrase, load it with: ssh-add $SSH_KEY"
+  key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; run connect.sh first"
 }
 
 # copy_remote: put the remote step scripts in ~/.headless/remote.
