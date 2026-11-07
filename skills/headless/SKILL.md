@@ -175,7 +175,11 @@ folder is, and how to update (below).
 
 Edit `machine.nix` or `settings.json` in the config folder, then run
 `apply.sh` and `verify.sh` again. The password is read from the store each
-time. To update inputs (nixpkgs, nix-darwin, this module):
+time. Turning an extra off later only stops the config managing it: the
+Mac keeps the value the extra set (for example, Spotlight stays off) and
+macOS's default does not come back. Tell the user so, and change that
+setting at the Mac, or add it to `machine.nix`, if they want it back.
+To update inputs (nixpkgs, nix-darwin, this module):
 `nix flake update --flake ~/headless/mini` on a computer with Nix, or delete
 `flake.lock` and run `apply.sh`.
 

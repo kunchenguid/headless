@@ -44,9 +44,11 @@ SSH ends sessions whose other end is gone after about three minutes; and
 `/etc/headless/settings.json` records what the Mac should be, for
 `verify.sh`.
 
-Turning an extra off stops the module managing it; it does not put the
-macOS default back. Automatic sign-in is the exception: `false` removes the
-stored password.
+Turning an extra off later stops the module managing it; it does not put
+the macOS default back. The Mac keeps the value the extra set (Spotlight
+stays off, the Mac still never sleeps, and so on) until the user changes it
+at the Mac or sets it in `machine.nix`. Automatic sign-in is the exception:
+`false` removes the stored password.
 
 Some Macs, virtual Macs among them, have no start-up-after-power-loss or
 wake-for-network setting. The module skips those with a warning, and
