@@ -40,8 +40,10 @@ This folder is a copy of the machine's config folder on your computer,
 written by the skill's apply.sh each time it runs. `nixos-rebuild switch`
 and `system.autoUpgrade` build it (`nixosConfigurations.machine`); the
 automatic update first moves flake.lock's nixpkgs to the newest revision of
-its release, and apply.sh keeps that newer one. Edit the config folder and
-run apply.sh: other changes made here are replaced at the next apply. The machine's earlier /etc/nixos, if it had one, is in
+its release, and once the update has built and the machine boots that
+system, apply.sh keeps that newer one. Edit the config folder and run
+apply.sh: other changes made here are replaced at the next apply. The
+machine's earlier /etc/nixos, if it had one, is in
 /etc/nixos.before-headless.
 MD
 chown -R root:root "$new"

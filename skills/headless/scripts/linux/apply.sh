@@ -123,12 +123,14 @@ say "copying $CONFIG to $ADDRESS"
 tar_c -C "$CONFIG" --exclude .git --exclude known_hosts . \
   | on 'rm -rf ~/.headless/config && mkdir -p -m 0700 ~/.headless/config && tar -xf - -C ~/.headless/config'
 # The machine's own updates move nixpkgs in /etc/nixos/flake.lock to newer
-# revisions of the same branch; apply keeps the newer one instead of going
-# back to the folder's, and writes it into the folder.
+# revisions of the same branch; once the machine boots a system built from
+# the newer one, apply keeps it instead of going back to the folder's, and
+# writes it into the folder.
 # shellcheck disable=SC2016 # runs on the machine
 if [ -f "$CONFIG/flake.lock" ] && [ "$(on 'f="$HOME/.headless/config/flake.lock"
   [ -f /etc/nixos/HEADLESS.md ] && [ -f /etc/nixos/flake.lock ] || exit 0
-  out="$('"$NIXOS_NIX"' eval --raw --impure --expr "import $HOME/.headless/remote/newer-nixpkgs.nix \"$f\" \"/etc/nixos/flake.lock\"")"
+  rev="$(/nix/var/nix/profiles/system/sw/bin/nixos-version --revision 2> /dev/null)"
+  out="$('"$NIXOS_NIX"' eval --raw --impure --expr "import $HOME/.headless/remote/newer-nixpkgs.nix \"$f\" \"/etc/nixos/flake.lock\" \"$rev\"")"
   [ -z "$out" ] || { printf "%s\n" "$out" > "$f" && echo newer; }')" = newer ]; then
   on 'cat ~/.headless/config/flake.lock' > "$CONFIG/flake.lock.new" && mv "$CONFIG/flake.lock.new" "$CONFIG/flake.lock" \
     || die "could not copy the machine's flake.lock into $CONFIG"
