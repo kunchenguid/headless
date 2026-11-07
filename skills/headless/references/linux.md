@@ -126,9 +126,13 @@ own SSH options win over any passed to it). The script first checks, with
 the pinned key, that the installer answers as the same machine before it
 starts nixos-anywhere.
 
-If it fails before the disk was erased, restarting the machine brings its
-old system back and the script can run again. If it fails after, the disk
-holds a half-installed system: install NixOS from a USB stick.
+The script locks the config's inputs on this computer before the installer
+starts, so a missing input or a network failure stops it with the machine
+untouched. If nixos-anywhere fails before the disk was erased, restarting
+the machine (`ssh root@ADDRESS reboot`, which the installer lets your key
+do) brings its old system back and the script can run again. If it fails
+after, the disk holds a half-installed system: install NixOS from a USB
+stick.
 
 ## When something fails
 

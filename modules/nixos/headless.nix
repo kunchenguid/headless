@@ -65,8 +65,9 @@ in
         description = ''
           Install updates automatically. This is for the skill's
           distro-neutral script on other distributions; on NixOS updates come
-          from your config folder (update flake.lock, then apply), so this
-          option changes nothing here.
+          from your config folder (update flake.lock, then apply) or from the
+          machine's own system.autoUpgrade, so this option changes nothing
+          here.
         '';
       };
     };

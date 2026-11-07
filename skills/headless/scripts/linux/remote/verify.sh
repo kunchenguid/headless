@@ -59,7 +59,7 @@ fi
 
 if [ "$(get AUTO_UPDATES)" = true ]; then
   case "$kind:$(get PACKAGES)" in
-    nixos:*) na "automatic updates (on NixOS, update flake.lock in the config folder and apply)" ;;
+    nixos:*) na "automatic updates (on NixOS, update flake.lock in the config folder and apply, or turn on the machine's own system.autoUpgrade)" ;;
     script:apt)
       [[ "$(dpkg-query -W -f='${Status}' unattended-upgrades 2> /dev/null)" == *'install ok installed'* ]] \
         && ok "unattended-upgrades installed" || fail "unattended-upgrades installed"

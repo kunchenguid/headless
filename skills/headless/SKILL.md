@@ -253,8 +253,9 @@ what comes next.
   `apply.sh` puts the folder in `/etc/nixos` (the old one is kept as
   `/etc/nixos.before-headless`), so `nixos-rebuild switch` and automatic
   updates at the machine build the same setup; an automatic update takes
-  the newest nixpkgs of the machine's release, and `apply.sh` keeps that
-  newer one and writes it into the folder's `flake.lock` to commit.
+  the newest nixpkgs of the machine's release, and once the machine boots a
+  system built from it, `apply.sh` keeps that newer one and writes it into
+  the folder's `flake.lock` to commit.
 - **Any other distribution:** offer to **replace it with NixOS**, using
   nixos-anywhere. Say plainly: this **erases the whole disk**, everything on
   it is gone, and it needs Nix on this computer, an x86_64 or aarch64

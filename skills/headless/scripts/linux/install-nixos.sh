@@ -128,9 +128,13 @@ NIX
   *) die "could not tell where $ADDRESS's address comes from (install-nixos.sh carries over an IPv4 address on the machine's network card); nothing was changed. Reach the machine at such an address, or install NixOS by hand" ;;
 esac
 if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
-if [ -n "$SOURCE" ]; then
-  "${NIXF[@]}" flake lock --override-input headless "$(flake_ref "$SOURCE")" "$(flake_ref "$CONFIG")" || die "could not lock the config against $SOURCE"
-fi
+# Lock the config's inputs here, before the installer starts: a missing
+# input or a network failure then stops with the machine untouched, rather
+# than inside nixos-anywhere with the machine in the installer.
+lock=(flake lock)
+[ -z "$SOURCE" ] || lock+=(--override-input headless "$(flake_ref "$SOURCE")")
+"${NIXF[@]}" "${lock[@]}" "$(flake_ref "$CONFIG")" \
+  || die "could not lock the config's inputs (above); nothing on $ADDRESS was changed"
 
 # The account's password carries over: its hash goes to the new system in a
 # root-only file (system.nix reads it when it first makes the account).
@@ -166,7 +170,7 @@ say "the installer is up; installing NixOS on $DISK"
   --generate-hardware-config nixos-generate-config "$CONFIG/hardware-configuration.nix" \
   --extra-files "$tmp/extra" --flake "$(flake_ref "$CONFIG")#machine" \
   -i "$SSH_KEY" --target-host "root@$ADDRESS" \
-  || die "nixos-anywhere failed (above). Restart the machine: if the install had not yet erased the disk, its old system comes back and install-nixos.sh can run again; otherwise it needs NixOS installed from a USB stick"
+  || die "nixos-anywhere failed (above). Restart the machine, from here with: ssh root@$ADDRESS reboot (the installer lets your key sign in as root). If the install had not yet erased the disk, its old system comes back and install-nixos.sh can run again; otherwise it needs NixOS installed from a USB stick"
 if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
 
 start=$SECONDS
