@@ -16,15 +16,21 @@ param([Parameter(Mandatory = $true)][ValidateSet('state', 'key', 'link', 'uninst
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 if ($Mode -eq 'uninstall') {
+  # Not over Tailscale itself: the uninstall would end this session halfway.
+  $here = @("$env:SSH_CONNECTION" -split ' ')[2]
+  $tsAddresses = @(Get-NetIPAddress -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -like 'Tailscale*' } | ForEach-Object { $_.IPAddress -replace '%.*$', '' })
+  if ($here -and $tsAddresses -contains ($here -replace '%.*$', '')) { Fail "this SSH session reaches the PC over Tailscale ($here); uninstall over the PC's local network address instead" }
   $apps = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
       Where-Object { $_.DisplayName -eq 'Tailscale' -and $_.WindowsInstaller -eq 1 })
-  if (-not $apps) { 'Tailscale is not installed'; exit 0 }
   foreach ($a in $apps) {
     $p = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList '/x', $a.PSChildName, '/quiet', '/norestart'
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail "the Tailscale uninstaller failed (exit code $($p.ExitCode))" }
   }
   # Its state, which ties it to the account that joined it.
-  Remove-Item -Recurse -Force (Join-Path $env:ProgramData 'Tailscale') -ErrorAction SilentlyContinue
+  $state = Join-Path $env:ProgramData 'Tailscale'
+  Remove-Item -Recurse -Force $state -ErrorAction SilentlyContinue
+  $left = @($TailscaleExe, $state | Where-Object { Test-Path $_ })
+  if ($left) { Fail "Tailscale is not fully removed ($($left -join ', ') still there); restart the PC (restart.sh) and run tailscale.sh --uninstall again" }
   'Tailscale uninstalled'
   exit 0
 }
@@ -40,7 +46,7 @@ $ts = Get-TailscaleState
 if ($null -eq $ts) { Fail 'Tailscale is not installed; run apply.sh with Tailscale on first' }
 if ($ts.Owner) {
   if ($Mode -eq 'state') { $ip = $ts.Ip; if (-not $ip) { $ip = '-' }; "Owned $ip $($ts.Owner)"; exit 0 }
-  Fail "Tailscale here was set up by $($ts.Owner) and answers only that account; it is left alone"
+  Fail "Tailscale here is in use by $($ts.Owner) and answers only that account; the skill does not join it again"
 }
 if ($ts.State -eq 'unknown') { Fail "cannot read Tailscale's state: $($ts.Error)" }
 if ($Mode -eq 'state') { "$($ts.State) $($ts.Ip)"; exit 0 }

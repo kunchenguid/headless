@@ -45,7 +45,7 @@ Tailscale install is kept and not reinstalled; `apply.sh` sets the same
 unattended policy on it (`UnattendedMode` = `always` under
 `HKLM\SOFTWARE\Policies\Tailscale`), so it too runs before anyone signs in.
 Tailscale on Windows answers only the account that joined it; one another
-account joined is left alone, and `references/windows.md` says how the
+account joined stays that account's (running unattended as it), and `references/windows.md` says how the
 skill's account can take it over once the user agrees.
 
 ## Another control server

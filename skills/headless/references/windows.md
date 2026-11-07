@@ -101,16 +101,21 @@ so it also runs before anyone signs in. Then `tailscale.sh` joins as on a
 Mac (`references/tailscale.md`).
 
 Tailscale on Windows answers only the account that joined it. If another
-account joined it before the skill, the skill leaves it alone: `verify.sh`
-shows `n/a Tailscale: set up by ACCOUNT, left alone` with its address from
-the Tailscale network adapter (or "not connected"), and `tailscale.sh` says
-the same. If the user wants the skill's account to own it instead, ask
-first, then run `tailscale.sh DIR --uninstall` over the PC's local network
-address (not its Tailscale one). It uninstalls Tailscale and removes its
-state in `C:\ProgramData\Tailscale`, which disconnects the PC from the
-tailnet. Then `apply.sh` installs it again and `tailscale.sh` joins it as
-the skill's account. The tailnet keeps the old entry, offline, for the user
-to remove in its admin console.
+account joined it before the skill, it stays that account's: `apply.sh`
+still sets the unattended policy, so it runs before anyone signs in as
+that account, and the skill does not join it again. `verify.sh` shows `n/a
+Tailscale: in use by ACCOUNT, not this account; the skill set it to run
+unattended as ACCOUNT`, with its address from the Tailscale network
+adapter (or "not connected"), and `tailscale.sh` says the same. If the
+user wants the skill's account to own it instead, ask first, then run
+`tailscale.sh DIR --uninstall` over the PC's local network address (not
+its Tailscale one; it refuses a session that comes over Tailscale). It
+uninstalls Tailscale and removes its state in `C:\ProgramData\Tailscale`,
+which disconnects the PC from the tailnet. Then `apply.sh` installs it
+again and `tailscale.sh` joins it as the skill's account. If files are
+left over, it says to restart the PC (`restart.sh`) and run it again. The
+tailnet keeps the old entry, offline, for the user to remove in its admin
+console.
 
 ## When something fails
 
@@ -129,7 +134,7 @@ to remove in its admin console.
 - **`restart.sh`: the account did not sign in by itself.** Check the
   password in the store and run `apply.sh` again. A PC joined to a domain,
   or with a sign-in notice set by policy, waits at the sign-in screen.
-- **Tailscale: set up by another account, left alone.** See Tailscale
+- **Tailscale: in use by another account.** See Tailscale
   above: with the user's yes, `tailscale.sh DIR --uninstall`, then
   `apply.sh` and `tailscale.sh`.
 - **A changed host key** stops every step on purpose; ask the user whether
