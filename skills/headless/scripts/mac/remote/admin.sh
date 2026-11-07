@@ -1,7 +1,7 @@
 #!/bin/bash
 # remote/admin.sh - the admin session's part on the Mac, run as root by
 # admin.sh with sudo -S. Standard input holds the login's password (one
-# line) after the line sudo read. settings.json sits beside this file.
+# line) after a --headless-stdin-- line. settings.json sits beside this file.
 #
 # usage: sudo -S bash admin.sh LOGIN
 set -euo pipefail
@@ -23,7 +23,9 @@ export HOME=/var/root
 dscl . -read "/Users/$LOGIN" UniqueID > /dev/null 2>&1 || die "$LOGIN is not an account on this Mac"
 auto_login="$(plutil -extract autoLogin raw "$HERE/settings.json")"
 
+# Skip to the mark line (the line sudo read, if it needed one, comes first).
 PASSWORD=""
+while IFS= read -r line && [ "$line" != --headless-stdin-- ]; do :; done
 IFS= read -r PASSWORD || true
 exec < /dev/null
 [ -n "$PASSWORD" ] || die "no password on standard input"

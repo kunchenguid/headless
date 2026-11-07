@@ -9,7 +9,6 @@ let
   cfg = config.headless;
   inherit (lib) mkOption types;
   ext = cfg.extras;
-  tailscale = lib.getExe' config.services.tailscale.package "tailscale";
   extra = description: mkOption {
     type = types.bool;
     default = true;
@@ -76,6 +75,10 @@ in
       {
         assertion = !(cfg.keyOnlySsh && cfg.sshKeys == [ ]);
         message = "headless.keyOnlySsh needs at least one key in headless.sshKeys, or nobody could sign in.";
+      }
+      {
+        assertion = !(lib.any (lib.hasSuffix " example-key-replaced-by-setup") cfg.sshKeys);
+        message = "headless.sshKeys still holds the template's example key; put your own public key in settings.json (the skill's new-config.sh does).";
       }
     ];
 
@@ -164,17 +167,16 @@ in
         headless_has powernap && /usr/bin/pmset -a powernap 0
       ''
       ++ lib.optional ext.startAfterPowerLoss ''
-        # Start up whenever power comes back, after a power cut or a clean
-        # shutdown alike. macOS keeps one start-up choice, and "always"
-        # (autorestartatconnect) covers both; older Macs have autorestart.
+        # Start up after a power cut (autorestart). Where the Mac also has
+        # autorestartatconnect, turn it on too, so it starts whenever power
+        # comes back, after a clean shutdown as well.
         echo >&2 "headless: turning start-up after power loss on..."
-        if headless_has autorestartatconnect; then
-          /usr/bin/pmset -a autorestartatconnect 1
-        elif headless_has autorestart; then
+        if headless_has autorestart; then
           /usr/bin/pmset -a autorestart 1
         else
           echo >&2 "headless: warning: this Mac has no start-up after power loss setting"
         fi
+        headless_has autorestartatconnect && /usr/bin/pmset -a autorestartatconnect 1
       ''
       ++ lib.optional ext.wakeOnLan ''
         echo >&2 "headless: turning wake for network access on..."

@@ -9,7 +9,7 @@
 load_config "${1-}"
 TIMEOUT=900
 [ "${2-}" != --timeout ] || TIMEOUT="${3:?--timeout needs seconds}"
-key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; nothing to restart"
+need_key
 with_secrets "$@"
 read_password
 

@@ -2,7 +2,8 @@
 # remote/tailscale.sh - start a Tailscale join on the Mac, run as root by
 # tailscale.sh with sudo -S.
 #
-# usage: sudo -S bash tailscale.sh key HOST SERVER    auth key on standard input
+# usage: sudo -S bash tailscale.sh key HOST SERVER    auth key on standard input,
+#                                                     after a --headless-stdin-- line
 #        sudo -S bash tailscale.sh link HOST SERVER   print a sign-in link
 # SERVER is - for Tailscale's own control server.
 set -euo pipefail
@@ -20,7 +21,9 @@ for _ in $(seq 30); do "$TS" status > /dev/null 2>&1 && break; "$TS" version > /
 
 case "$MODE" in
   key)
+    # Skip to the mark line (the line sudo read, if it needed one, comes first).
     KEY=""
+    while IFS= read -r line && [ "$line" != --headless-stdin-- ]; do :; done
     IFS= read -r KEY || true
     exec < /dev/null
     [ -n "$KEY" ] || die "no auth key on standard input"

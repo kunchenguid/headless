@@ -17,7 +17,9 @@ export HOME=/var/root
 # owns them afterwards, so later switches move nothing.
 if [ ! -e /run/current-system ]; then
   while IFS= read -r f; do
-    if [ -f "/etc/$f" ] && [ ! -L "/etc/$f" ]; then
+    if [ -e "/etc/$f.before-nix-darwin" ]; then
+      echo "headless: /etc/$f.before-nix-darwin already exists; left /etc/$f in place"
+    elif [ -f "/etc/$f" ] && [ ! -L "/etc/$f" ]; then
       mv "/etc/$f" "/etc/$f.before-nix-darwin"
       echo "headless: moved /etc/$f aside to /etc/$f.before-nix-darwin"
     fi

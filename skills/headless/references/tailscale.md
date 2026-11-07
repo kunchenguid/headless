@@ -8,7 +8,8 @@ anywhere without opening ports.
   with no app and no menu bar item. It starts by itself at every start-up.
 - If the Mac already runs the **Tailscale app**, leave it alone: keep
   `tailscale` off. Two Tailscale clients on one Mac fight over the network.
-  `tailscale.sh` refuses to run when it finds `/Applications/Tailscale.app`.
+  `apply.sh` and `tailscale.sh` refuse to turn it on when they find
+  `/Applications/Tailscale.app`.
 
 ## Joining
 

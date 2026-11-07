@@ -70,7 +70,10 @@ running as them could still read it. Prefer a real store.
 
 Also make sure the user has an SSH key on this computer
 (`~/.ssh/id_ed25519.pub`). If not, offer to make one with
-`ssh-keygen -t ed25519` (the user chooses its passphrase).
+`ssh-keygen -t ed25519` (the user chooses its passphrase). The scripts sign
+in without prompts, so a key with a passphrase must be loaded in ssh-agent:
+ask the user to run `ssh-add ~/.ssh/id_ed25519` (on a Mac,
+`ssh-add --apple-use-keychain ~/.ssh/id_ed25519` keeps it across restarts).
 
 ## Step 3: The config folder
 
@@ -83,7 +86,9 @@ Ask these choices, with the defaults in **bold**:
 
 - Machine name (host name): **keep the current one**, or a new one.
 - Automatic sign-in at start-up: **on** (needs FileVault off).
-- Tailscale: **off**. Offer it; never require it (step 6).
+- Tailscale: **off**. Offer it; never require it (step 6). If the Mac already
+  has the Tailscale app (`/Applications/Tailscale.app`), keep this off and
+  leave the app as it is; `apply.sh` refuses to start a second Tailscale.
 - Extras, each **on** and each can be turned off: `neverSleep`,
   `startAfterPowerLoss`, `wakeOnLan`, `powerNapOff`, `spotlightOff`,
   `siriOff` (`references/mac.md` says what each does).
@@ -121,7 +126,8 @@ $SKILL/scripts/mac/admin.sh ~/headless/mini
 
 It installs Determinate Nix (pinned version, checked hash) and, when
 automatic sign-in is on, stores the sign-in password macOS uses at start-up
-(`/etc/kcpassword`, root-only). If FileVault is on and automatic sign-in is
+(`/etc/kcpassword`, root-only, and recoverable by anyone with root on the
+Mac; say so). If FileVault is on and automatic sign-in is
 chosen, it stops and says so: the user either turns FileVault off at the Mac
 or sets `"autoLogin": false` in `settings.json`.
 
@@ -136,9 +142,8 @@ with `sudo -S` (password from the store again). The first run copies
 `flake.lock` back into the folder. Then commit the folder:
 `git -C ~/headless/mini add -A && git -C ~/headless/mini commit -m "headless: set up"`.
 
-**Tailscale (only if chosen).** Check first that the Mac does not already
-run the Tailscale app (`tailscale.sh` refuses if it does, and the app stays
-as it is). With `"tailscale": { "enable": true }` applied:
+**Tailscale (only if chosen).** With `"tailscale": { "enable": true }`
+applied:
 
 ```sh
 $SKILL/scripts/mac/tailscale.sh ~/headless/mini

@@ -32,7 +32,7 @@ The config folder's `settings.json` holds the module's options
 | `autoLogin` | `true` | Sign the account in on the screen at every start; `false` removes the stored password. |
 | `tailscale.enable` | `false` | Run the open-source Tailscale daemon. |
 | `extras.neverSleep` | `true` | The Mac and its disks never sleep; the display sleeps after 10 minutes. |
-| `extras.startAfterPowerLoss` | `true` | Start up whenever power comes back, after a power cut or a clean shutdown. |
+| `extras.startAfterPowerLoss` | `true` | Start up after a power cut; where the Mac also offers it, after a clean shutdown too. |
 | `extras.wakeOnLan` | `true` | Wake for network access. |
 | `extras.powerNapOff` | `true` | Power Nap off. |
 | `extras.spotlightOff` | `true` | Spotlight indexing off on every volume. |

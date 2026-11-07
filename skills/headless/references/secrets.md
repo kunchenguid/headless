@@ -73,6 +73,15 @@ Be honest about the limit: this is a plain-text file, and an agent or any
 program that can run shell commands as the user could still read it. A real
 secret store with per-use approval is safer.
 
+## On the Mac: automatic sign-in keeps the password
+
+Whatever the store, automatic sign-in needs macOS to know the password at
+start-up, so the Mac keeps it in `/etc/kcpassword`, readable by root only.
+That file is not encryption: it holds the password XORed with a fixed key
+everyone knows, so anyone who gets root on the Mac, or its disk while
+FileVault is off, can recover the password. Tell the user so when they choose
+automatic sign-in; with `"autoLogin": false` the file is removed.
+
 ## A Tailscale auth key
 
 The same entry formats hold a Tailscale auth key, if the user joins Tailscale

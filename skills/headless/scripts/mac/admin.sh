@@ -10,7 +10,7 @@
 # shellcheck source=skills/headless/scripts/mac/lib.sh
 . "$(dirname "$0")/lib.sh"
 load_config "${1-}"
-key_works || die "key sign-in to $LOGIN@$ADDRESS does not work yet; run connect.sh first"
+need_key
 with_secrets "$@"
 read_password
 

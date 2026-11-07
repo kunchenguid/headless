@@ -22,8 +22,13 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1" ;;
   esac
 done
-key_works || die "key sign-in to $LOGIN@$ADDRESS does not work yet; run connect.sh first"
+need_key
 on "test -x $NIX" || die "Nix is not on $ADDRESS yet; run admin.sh first"
+# The module's Tailscale daemon must not run beside the Tailscale app.
+if on 'plutil -extract tailscale.enable raw -' < "$CONFIG/settings.json" 2> /dev/null | grep -qx true \
+  && on 'test -d /Applications/Tailscale.app'; then
+  die "the Tailscale app is on $ADDRESS; leave it as it is and set \"tailscale\": { \"enable\": false } in settings.json"
+fi
 set -- "$CONFIG" ${SOURCE:+--headless-source "$SOURCE"}
 with_secrets "$@"
 read_password

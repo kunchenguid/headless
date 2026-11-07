@@ -22,7 +22,13 @@
     # The template's own machine settings, built as an example system, so
     # `nix flake check` proves the module and the template evaluate and build.
     darwinConfigurations.example = nix-darwin.lib.darwinSystem {
-      modules = [ self.darwinModules.headless ./skills/headless/assets/darwin/machine.nix ];
+      modules = [
+        self.darwinModules.headless
+        ./skills/headless/assets/darwin/machine.nix
+        # The template's key is a placeholder the module refuses; the skill
+        # puts the user's own key there.
+        { headless.sshKeys = nixpkgs.lib.mkForce [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMypJnmwSE7hhkQADVWGRLHsEeA6BU2Sj/TxykcHxHcP flake-check" ]; }
+      ];
     };
     checks.aarch64-darwin.example = self.darwinConfigurations.example.system;
   };

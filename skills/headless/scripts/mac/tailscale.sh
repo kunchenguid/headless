@@ -14,7 +14,7 @@
 . "$(dirname "$0")/lib.sh"
 load_config "${1-}"
 TS=/run/current-system/sw/bin/tailscale
-key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; run connect.sh first"
+need_key
 on 'test ! -d /Applications/Tailscale.app' || die "the Tailscale app is already on $ADDRESS; leave it as it is and keep \"tailscale\" off in settings.json"
 on 'plutil -extract tailscale raw /etc/headless/settings.json' 2> /dev/null | grep -qx true \
   || die "Tailscale is off in the Mac's system; set \"tailscale\": { \"enable\": true } in settings.json and run apply.sh"

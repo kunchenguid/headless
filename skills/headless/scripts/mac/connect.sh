@@ -41,7 +41,7 @@ else
       'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; IFS= read -r k; grep -qxF "$k" ~/.ssh/authorized_keys || printf "%s\n" "$k" >> ~/.ssh/authorized_keys' \
     || die "password sign-in to $LOGIN@$ADDRESS failed; check the password in $PASSWORD_REF and that Remote Login allows $LOGIN"
   unset PASSWORD
-  key_works || die "your key was added but key sign-in still fails"
+  key_works || die "your key was added but key sign-in still fails; if your key has a passphrase, load it with: ssh-add $SSH_KEY, then run connect.sh again"
   say "added your key to $LOGIN@$ADDRESS; key sign-in works"
 fi
 

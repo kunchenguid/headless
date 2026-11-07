@@ -44,9 +44,8 @@ cap="$(pmset -g cap)"
 has() { printf '%s\n' "$cap" | grep -qw "$1"; }
 na() { echo "n/a   $1 (this Mac has no such power setting)"; }
 if [ "$(get extras.startAfterPowerLoss)" = true ]; then
-  if has autorestartatconnect; then is "$(pmv autorestartatconnect)" 1 "starts up whenever power comes back"
-  elif has autorestart; then is "$(pmv autorestart)" 1 "starts up after a power cut"
-  else na "start-up after power loss"; fi
+  if has autorestart; then is "$(pmv autorestart)" 1 "starts up after a power cut"; else na "start-up after power loss"; fi
+  ! has autorestartatconnect || is "$(pmv autorestartatconnect)" 1 "starts up whenever power comes back"
 fi
 if [ "$(get extras.wakeOnLan)" = true ]; then
   if has womp; then is "$(pmv womp)" 1 "wake for network access"; else na "wake for network access"; fi
@@ -62,3 +61,4 @@ if [ "$(get tailscale)" = true ]; then
   st="$("$ts" status --json 2> /dev/null | plutil -extract BackendState raw - 2> /dev/null)"
   is "$st" Running "Tailscale connected"
 fi
+exit 0

@@ -49,8 +49,13 @@ load_config() {
 # on COMMAND: run COMMAND on the machine as LOGIN, by key.
 on() { ssh "${SSH_OPTS[@]}" "$LOGIN@$ADDRESS" "$@"; }
 
-# key_works: true when key sign-in works.
+# key_works: true when key sign-in works. need_key: stop unless it does.
+# Key sign-in runs without prompts, so a key with a passphrase must be
+# loaded in ssh-agent first.
 key_works() { [ -s "$KNOWN_HOSTS" ] && on true > /dev/null 2>&1; }
+need_key() {
+  key_works || die "key sign-in to $LOGIN@$ADDRESS does not work. Run connect.sh first; if your key has a passphrase, load it with: ssh-add $SSH_KEY"
+}
 
 # copy_remote: put the remote step scripts in ~/.headless/remote.
 copy_remote() {
@@ -80,8 +85,11 @@ read_password() {
 }
 
 # as_root COMMAND: run COMMAND on the machine as root, the password piped
-# to sudo -S. Lines given in EXTRA_STDIN follow the password.
+# to sudo -S. Lines given in EXTRA_STDIN follow a STDIN_MARK line: sudo
+# reads no password when it needs none, so COMMAND skips to that line
+# before reading its own input (remote/*.sh do).
+STDIN_MARK=--headless-stdin--
 as_root() {
-  { printf '%s\n' "$PASSWORD"; [ -z "${EXTRA_STDIN-}" ] || printf '%s\n' "$EXTRA_STDIN"; } \
+  { printf '%s\n' "$PASSWORD"; [ -z "${EXTRA_STDIN-}" ] || printf '%s\n%s\n' "$STDIN_MARK" "$EXTRA_STDIN"; } \
     | on "sudo -S -p '' $1"
 }
