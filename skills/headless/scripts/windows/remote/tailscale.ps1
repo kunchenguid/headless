@@ -1,14 +1,33 @@
 # tailscale.ps1 - Tailscale on the Windows machine, for tailscale.sh, run in
 # the administrator's SSH session.
 #
-# usage: tailscale.ps1 -Mode state            print "STATE IP", or "off"
+# usage: tailscale.ps1 -Mode state            print "STATE IP", "off", or
+#                                             "Owned IP ACCOUNT" (IP - when
+#                                             none) for a Tailscale another
+#                                             account joined
+#        tailscale.ps1 -Mode uninstall        uninstall Tailscale and its
+#                                             state (once the user agreed)
 #        tailscale.ps1 -Mode key -Server S    join with the auth key on
 #                                             standard input
 #        tailscale.ps1 -Mode link -Server S   print a sign-in link
 # S is - for Tailscale's own control server. The machine joins unattended
 # (it stays connected with nobody signed in), under its host name.
-param([Parameter(Mandatory = $true)][ValidateSet('state', 'key', 'link')][string]$Mode, [string]$Server = '-')
+param([Parameter(Mandatory = $true)][ValidateSet('state', 'key', 'link', 'uninstall')][string]$Mode, [string]$Server = '-')
 . (Join-Path $PSScriptRoot 'common.ps1')
+
+if ($Mode -eq 'uninstall') {
+  $apps = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
+      Where-Object { $_.DisplayName -eq 'Tailscale' -and $_.WindowsInstaller -eq 1 })
+  if (-not $apps) { 'Tailscale is not installed'; exit 0 }
+  foreach ($a in $apps) {
+    $p = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList '/x', $a.PSChildName, '/quiet', '/norestart'
+    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail "the Tailscale uninstaller failed (exit code $($p.ExitCode))" }
+  }
+  # Its state, which ties it to the account that joined it.
+  Remove-Item -Recurse -Force (Join-Path $env:ProgramData 'Tailscale') -ErrorAction SilentlyContinue
+  'Tailscale uninstalled'
+  exit 0
+}
 
 $record = Join-Path $HeadlessHome 'settings.json'
 $on = $false
@@ -19,6 +38,10 @@ if (-not $on) {
 }
 $ts = Get-TailscaleState
 if ($null -eq $ts) { Fail 'Tailscale is not installed; run apply.sh with Tailscale on first' }
+if ($ts.Owner) {
+  if ($Mode -eq 'state') { $ip = $ts.Ip; if (-not $ip) { $ip = '-' }; "Owned $ip $($ts.Owner)"; exit 0 }
+  Fail "Tailscale here was set up by $($ts.Owner) and answers only that account; it is left alone"
+}
 if ($ts.State -eq 'unknown') { Fail "cannot read Tailscale's state: $($ts.Error)" }
 if ($Mode -eq 'state') { "$($ts.State) $($ts.Ip)"; exit 0 }
 

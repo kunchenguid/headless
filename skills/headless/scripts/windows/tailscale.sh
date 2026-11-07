@@ -8,6 +8,11 @@
 #                                  sign-in link for you to open
 #        tailscale.sh DIR --wait   wait (up to 10 minutes) until the machine
 #                                  is connected, after you opened the link
+#        tailscale.sh DIR --uninstall
+#                                  uninstall Tailscale and its state, only
+#                                  once the user agreed (for a Tailscale
+#                                  another Windows account set up), then run
+#                                  apply.sh and tailscale.sh again
 #
 # TAILSCALE_LOGIN_SERVER in headless.env picks a control server other than
 # Tailscale's own (such as Headscale). No admin password is needed: an
@@ -15,14 +20,29 @@
 # shellcheck source=skills/headless/scripts/windows/lib.sh
 . "$(dirname "$0")/lib.sh"
 load_config "${1-}"
+# Over Tailscale itself, an uninstall would end its own session halfway.
+[ "${2-}" != --uninstall ] || [[ ! "$ADDRESS" =~ ^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\. ]] \
+  || die "$ADDRESS is a Tailscale address; uninstall over the PC's local network address instead"
 need_key
 copy_remote
+if [ "${2-}" = --uninstall ]; then
+  run_remote tailscale -Mode uninstall < /dev/null | tr -d '\r' || die "Tailscale was not uninstalled"
+  say "next: apply.sh installs Tailscale again, then tailscale.sh joins it as $LOGIN"
+  exit 0
+fi
 # ts_state: "off", "<BackendState> <IP>", or nothing when it cannot be read
 # (such as a dropped connection while waiting).
 ts_state() { run_remote tailscale -Mode state < /dev/null 2> /dev/null | tr -d '\r' | tail -n 1 || true; }
 # The first read shows the machine's own reason when it fails.
 state="$(run_remote tailscale -Mode state < /dev/null | tr -d '\r' | tail -n 1)" \
   || die "could not read Tailscale's state on $ADDRESS"
+if [ "${state%% *}" = Owned ]; then
+  rest="${state#Owned }" ip="${rest%% *}"
+  [ "$ip" = - ] && how="not connected" || how="connected: $ip"
+  say "Tailscale on $ADDRESS was set up by ${rest#* } and answers only that account, so it is left alone ($how)"
+  say "to have $LOGIN own it instead, with the user's yes: tailscale.sh $CONFIG --uninstall, then apply.sh and tailscale.sh"
+  exit 0
+fi
 [ "$state" != off ] || die "Tailscale is off on $ADDRESS; set \"tailscale\": { \"enable\": true } in settings.json and run apply.sh"
 
 if [ "${2-}" = --wait ]; then

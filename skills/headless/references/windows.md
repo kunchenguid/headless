@@ -97,9 +97,20 @@ SHA-256) and installs it with unattended mode on, so it connects at
 start-up before anyone signs in. An existing Tailscale install is kept
 and not reinstalled; `apply.sh` sets the same unattended policy on it
 (`UnattendedMode` = `always` under `HKLM\SOFTWARE\Policies\Tailscale`),
-so it also runs before anyone signs in, as long as the skill's account is
-the one that joined it (see "When something fails"). Then `tailscale.sh`
-joins as on a Mac (`references/tailscale.md`).
+so it also runs before anyone signs in. Then `tailscale.sh` joins as on a
+Mac (`references/tailscale.md`).
+
+Tailscale on Windows answers only the account that joined it. If another
+account joined it before the skill, the skill leaves it alone: `verify.sh`
+shows `n/a Tailscale: set up by ACCOUNT, left alone` with its address from
+the Tailscale network adapter (or "not connected"), and `tailscale.sh` says
+the same. If the user wants the skill's account to own it instead, ask
+first, then run `tailscale.sh DIR --uninstall` over the PC's local network
+address (not its Tailscale one). It uninstalls Tailscale and removes its
+state in `C:\ProgramData\Tailscale`, which disconnects the PC from the
+tailnet. Then `apply.sh` installs it again and `tailscale.sh` joins it as
+the skill's account. The tailnet keeps the old entry, offline, for the user
+to remove in its admin console.
 
 ## When something fails
 
@@ -118,13 +129,9 @@ joins as on a Mac (`references/tailscale.md`).
 - **`restart.sh`: the account did not sign in by itself.** Check the
   password in the store and run `apply.sh` again. A PC joined to a domain,
   or with a sign-in notice set by policy, waits at the sign-in screen.
-- **Tailscale: "already in use by" or "running in server mode" for
-  another account.** Tailscale on Windows answers only the account that
-  joined it to the tailnet, so a Tailscale another account set up before
-  the skill cannot be read or joined by the skill's account, even after
-  that account logs out of it. Use that account for the skill, or have the
-  user uninstall Tailscale at the PC (Settings > Apps) and run `apply.sh`
-  and `tailscale.sh` again to install and join it as the skill's account.
+- **Tailscale: set up by another account, left alone.** See Tailscale
+  above: with the user's yes, `tailscale.sh DIR --uninstall`, then
+  `apply.sh` and `tailscale.sh`.
 - **A changed host key** stops every step on purpose; ask the user whether
   Windows was reinstalled before removing the folder's `known_hosts`.
 

@@ -314,7 +314,15 @@ function Invoke-Sshd([string]$Exe, [string[]]$Arguments) {
   } finally { Remove-Item -Force "$log.out", "$log.err" -ErrorAction SilentlyContinue }
 }
 
+# Tailscale's IPv4 on its network adapter, which any administrator can read.
+function Get-TailscaleAdapterIp {
+  return [string](@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+      Where-Object { $_.InterfaceAlias -like 'Tailscale*' -and $_.IPAddress -like '100.*' })[0].IPAddress)
+}
+
 # Tailscale's state: BackendState (Running when connected) and its IPv4.
+# State is unknown when Tailscale does not answer, with its reason in Error;
+# Owner then names the other account Tailscale answers to, if that is why.
 function Get-TailscaleState {
   if (-not (Test-Path $TailscaleExe)) { return $null }
   # Windows PowerShell stops at a redirected error line under 'Stop'.
@@ -323,8 +331,13 @@ function Get-TailscaleState {
   $err = ($out | Where-Object { $_ -is [Management.Automation.ErrorRecord] }) -join ' '
   $st = $null
   try { $st = ($out | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) -join "`n" | ConvertFrom-Json } catch { }
-  # Such as "Tailscale already in use by" another account signed in at the PC.
-  if (-not $st) { return @{ State = 'unknown'; Ip = ''; AuthUrl = ''; Error = "$err" } }
+  if (-not $st) {
+    # Tailscale on Windows answers only the account that joined it: "already
+    # in use by X, pid N" or "running in server mode ("X")".
+    $owner = ''
+    if ($err -match 'already in use by (.+?), pid' -or $err -match 'server mode \("(.+?)"\)') { $owner = $Matches[1] -replace '\\\\', '\' }
+    return @{ State = 'unknown'; Ip = (Get-TailscaleAdapterIp); AuthUrl = ''; Error = "$err"; Owner = $owner }
+  }
   $ip = ''
   if ($st.Self -and $st.Self.TailscaleIPs) { $ip = @($st.Self.TailscaleIPs | Where-Object { $_ -match '^\d+\.' })[0] }
   return @{ State = [string]$st.BackendState; Ip = [string]$ip; AuthUrl = [string]$st.AuthURL }

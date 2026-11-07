@@ -97,7 +97,11 @@ if ($s.tailscale.enable) {
     Check ($svc -and $svc.Status -eq 'Running' -and $svc.StartType -eq 'Automatic') 'Tailscale service running, starts at start-up'
     Check ((Get-RegValue 'HKLM:\SOFTWARE\Policies\Tailscale' 'UnattendedMode') -eq 'always') 'Tailscale runs unattended (before anyone signs in)'
     if ($ts.State -eq 'Running') { Check $true "Tailscale connected: $($ts.Ip)" }
-    elseif ($ts.State -eq 'unknown') { Check $false "Tailscale connected (cannot read it: $($ts.Error))" }
+    elseif ($ts.Owner) {
+      $how = 'not connected'
+      if ($ts.Ip) { $how = "connected: $($ts.Ip)" }
+      NotApplicable "Tailscale: set up by $($ts.Owner), left alone ($how)"
+    } elseif ($ts.State -eq 'unknown') { Check $false "Tailscale connected (cannot read it: $($ts.Error))" }
     else { Check $false "Tailscale connected (it is $($ts.State); run tailscale.sh)" }
   }
 }

@@ -374,8 +374,10 @@ secret, never as plain text in the registry; any administrator of the PC
 can still read it back (say so). Commit the folder afterwards. For
 Tailscale, run `$SKILL/scripts/windows/tailscale.sh ~/headless/pc` as in
 step 6; an existing Tailscale install is kept, and `apply.sh` sets its
-unattended policy so it runs before anyone signs in (if another account
-joined it, see `references/windows.md`).
+unattended policy so it runs before anyone signs in. One that another
+Windows account joined is left alone; if the user wants the skill to own
+it, ask, then `tailscale.sh ~/headless/pc --uninstall`, `apply.sh` and
+`tailscale.sh` (`references/windows.md`).
 
 **W6. Verify, restart, verify.**
 
