@@ -17,13 +17,13 @@
   use Settings > System > Optional features > View features > OpenSSH
   Server instead.
 - **SSH allowed through Windows Firewall.** Installing OpenSSH Server adds
-  the rule `OpenSSH-Server-In-TCP` for TCP port 22. On Windows 11 it applies
-  to Private networks only, and Windows makes every new network Public, so
-  SSH stays blocked until the network is marked Private (step W1's last
-  line, or Settings > Network & internet > the network > Network profile
-  type > Private). On a network the user does not trust, keep it Public
-  and reach the PC some other way; the skill does not open SSH on Public
-  networks. Windows Server's rule applies to every network kind.
+  the rule `OpenSSH-Server-In-TCP` for TCP port 22. It applies to Private
+  networks only (on Windows 11 and on Windows Server 2025), and Windows
+  makes every new network Public, so SSH stays blocked until the network is
+  marked Private (step W1's last line, or Settings > Network & internet >
+  the network > Network profile type > Private). On a network the user
+  does not trust, keep it Public and reach the PC some other way; the
+  skill does not open SSH on Public networks.
 - **Its address**: Settings > Network & internet > (the network) >
   Properties shows the IPv4 address; the PC's name followed by `.local`
   often works too.

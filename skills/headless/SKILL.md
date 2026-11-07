@@ -325,7 +325,7 @@ Set-Service -Name sshd -StartupType Automatic
 Start-Service sshd
 ```
 
-The first line takes a few minutes. On Windows 11, OpenSSH's firewall rule
+The first line takes a few minutes. OpenSSH's firewall rule
 lets SSH in only on a **Private** network, and Windows makes a new network
 Public. Ask whether this network is their home or office network (Settings
 > Network & internet shows "Public network" or "Private network"); if it
