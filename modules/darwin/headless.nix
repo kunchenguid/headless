@@ -62,7 +62,7 @@ in
     };
     extras = {
       neverSleep = extra "Never sleep the machine or its disks; only the display sleeps.";
-      startAfterPowerLoss = extra "Start up again by itself after a power cut, and whenever power is connected.";
+      startAfterPowerLoss = extra "Start up again by itself after a power cut.";
       wakeOnLan = extra "Wake for network access.";
       powerNapOff = extra "Turn Power Nap off.";
       spotlightOff = extra "Turn Spotlight indexing off on every volume.";
