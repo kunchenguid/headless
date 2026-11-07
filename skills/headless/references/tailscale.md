@@ -35,6 +35,14 @@ Debian, Ubuntu and Fedora `apply.sh` installs Tailscale from Tailscale's own
 signed package repository and starts it. An existing Tailscale install is
 kept as it is.
 
+## On Windows
+
+The same settings and the same two ways to join, with
+`scripts/windows/tailscale.sh`. `apply.sh` installs Tailscale from its own
+installer (pinned version, checked SHA-256) in unattended mode, so it runs
+as a service and connects at start-up before anyone signs in. An existing
+Tailscale install is kept as it is; the skill does not reinstall it.
+
 ## Another control server
 
 To use a self-hosted control server such as Headscale, set

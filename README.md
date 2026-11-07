@@ -13,8 +13,9 @@ This version covers **Apple silicon Macs**, configured with
 machines**: NixOS with this repository's NixOS module; any other
 distribution replaced with NixOS by
 [nixos-anywhere](https://github.com/nix-community/nixos-anywhere) if you
-choose; or, if you keep Debian, Ubuntu or Fedora, a distro-neutral script.
-Windows is planned.
+choose; or, if you keep Debian, Ubuntu or Fedora, a distro-neutral script;
+and **Windows 11 and Windows Server 2025** PCs, configured with a
+rerunnable PowerShell script over OpenSSH.
 
 ## Install the skill
 
@@ -37,12 +38,16 @@ through:
 A Linux machine takes the same path, without the admin session: after the
 first sign-in, a machine on NixOS is applied as it is; on another
 distribution you choose between installing NixOS (the whole disk is erased)
-and keeping it with the script.
+and keeping it with the script. A Windows PC starts with three lines you
+paste in an administrator PowerShell to turn OpenSSH Server on; after the
+first sign-in, applying the config sets key-only SSH, automatic sign-in
+(the password kept as an LSA secret), the extras and Tailscale.
 
 ## The repository
 
 - `skills/headless/`: the skill (`SKILL.md`, `references/`, `scripts/`, and
-  `assets/darwin` and `assets/nixos`, the default configs it copies).
+  `assets/darwin`, `assets/nixos` and `assets/windows`, the default
+  configs it copies).
 - `modules/darwin/headless.nix`: the nix-darwin module, exported as
   `darwinModules.headless`. Use it from your own flake:
 
@@ -60,7 +65,8 @@ and keeping it with the script.
 - `templates.darwin` (default) and `templates.nixos`:
   `nix flake init -t github:kunchenguid/headless#nixos` gives the starting
   config the skill copies (with a disko disk layout for new installs).
-- `tests/`: the secret helper's test and the Mac and Linux journeys CI runs.
+- `tests/`: the secret helper's test and the Mac, Linux and Windows journeys
+  CI runs.
 
 ## Checks
 
@@ -74,7 +80,10 @@ The `mac` workflow runs the whole journey on a GitHub-hosted Mac, over SSH
 to itself. The `linux` workflow runs the distro-neutral script on a
 GitHub-hosted Ubuntu runner over SSH to itself, and installs NixOS with
 nixos-anywhere on an x86_64 Ubuntu virtual machine there, then applies,
-restarts and verifies it. Each checks its log never holds the password.
+restarts and verifies it. The `windows` workflow checks every PowerShell
+file parses, then runs the Windows journey on a GitHub-hosted Windows Server
+runner over SSH to itself, from Ubuntu under WSL. Each checks its log never
+holds the password.
 
 ## License
 

@@ -85,16 +85,6 @@ put_settings() {
   printf '%s\n' "$env" | on 'cat > ~/.headless/remote/settings.env'
 }
 
-# tar_c ARGS...: tar to standard output, without the macOS extended
-# attributes that GNU tar on the machine would warn about.
-tar_c() {
-  if tar --version 2> /dev/null | grep -q bsdtar; then
-    COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -cf - "$@"
-  else
-    tar -cf - "$@"
-  fi
-}
-
 # copy_remote: put the remote step scripts in ~/.headless/remote: the
 # shared ones (scripts/remote) and Linux's.
 copy_remote() {
