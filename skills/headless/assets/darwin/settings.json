@@ -1,0 +1,18 @@
+{
+  "user": "admin",
+  "hostName": "headless-mac",
+  "sshKeys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMypJnmwSE7hhkQADVWGRLHsEeA6BU2Sj/TxykcHxHcP example-key-replaced-by-setup"
+  ],
+  "keyOnlySsh": true,
+  "autoLogin": true,
+  "tailscale": { "enable": false },
+  "extras": {
+    "neverSleep": true,
+    "startAfterPowerLoss": true,
+    "wakeOnLan": true,
+    "powerNapOff": true,
+    "spotlightOff": true,
+    "siriOff": true
+  }
+}

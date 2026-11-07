@@ -1,0 +1,61 @@
+name: mac
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the scripts
+        run: |
+          brew install shellcheck
+          shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/mac/*.sh skills/headless/scripts/mac/remote/*.sh
+      - name: Secret helper
+        run: tests/secret-run.test.sh
+      - name: Skill is valid and found
+        run: |
+          lines=$(wc -l < skills/headless/SKILL.md)
+          echo "SKILL.md has $lines lines"; [ "$lines" -lt 500 ]
+          npx --yes skills add . --list 2>&1 | tee skills.txt
+          grep -q headless skills.txt
+          pipx run --spec skills-ref agentskills validate skills/headless
+
+  journey:
+    # The skill's whole Mac journey, against this runner over SSH, with the
+    # env-file store: new config, first sign-in, admin session, apply, verify.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make a "new Mac" account with a password and Remote Login on
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/secrets"
+          pw="$(openssl rand -base64 18 | tr -d '/+=')x9"
+          printf 'HEADLESS_PASSWORD=%s\n' "$pw" > "$RUNNER_TEMP/secrets/mac.env"
+          printf '%s\n' "$pw" > "$RUNNER_TEMP/secrets/pw"
+          # The account's password goes in from a file, never this log.
+          sudo sysadminctl -addUser headless -fullName Headless -admin -password "$(cat "$RUNNER_TEMP/secrets/pw")" 2>&1 | grep -v -F "$pw" || true
+          sudo dscl . -read /Users/headless UniqueID
+          sudo systemsetup -setremotelogin on 2>&1 || sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/headless_test
+      - name: Journey
+        run: |
+          SSH_KEY=~/.ssh/headless_test tests/mac-journey.sh 127.0.0.1 headless \
+            "$RUNNER_TEMP/secrets/mac.env" "$RUNNER_TEMP/mac-config" -- --host-name headless-ci
+      - name: The password is in no log
+        if: always()
+        run: |
+          pw="$(cat "$RUNNER_TEMP/secrets/pw")"
+          if grep -rqF -- "$pw" "$RUNNER_TEMP/mac-config.journey.log" "$RUNNER_TEMP/mac-config"; then
+            echo "the password is in the journey's log or config folder"; exit 1
+          fi
+          echo "the password is in neither the journey's log nor its config folder"
