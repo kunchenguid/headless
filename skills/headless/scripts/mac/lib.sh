@@ -1,5 +1,6 @@
 # shellcheck shell=bash disable=SC2034
-# lib.sh - shared by the Mac step scripts beside it; sourced, not run.
+# lib.sh - shared by the Mac step scripts beside it, and by the Linux ones
+# (linux/lib.sh sources it); sourced, not run.
 #
 # Every step takes the machine's config folder (made by new-config.sh). Its
 # headless.env names how to reach the machine and where the password lives;
@@ -61,9 +62,53 @@ need_key() {
   key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; run connect.sh first"
 }
 
-# copy_remote: put the remote step scripts in ~/.headless/remote.
+# first_sign_in HINT: pin the machine's ed25519 host key in the config
+# folder on first use (and refuse a changed one), then, unless key sign-in
+# already works, sign in once with the password from the store and add
+# your public key. HINT says what to check when the machine gives no key.
+# Run it before with_secrets: it wires the password itself when needed.
+first_sign_in() {
+  local scanned
+  scanned="$(ssh-keyscan -T 10 -t ed25519 "$ADDRESS" 2> /dev/null | grep -v '^#' || true)"
+  [ "$(printf '%s\n' "$scanned" | grep -c .)" -eq 1 ] || die "$ADDRESS gave no single ed25519 host key; $1"
+  if [ -s "$KNOWN_HOSTS" ]; then
+    [ "$(cut -d' ' -f2- < "$KNOWN_HOSTS")" = "$(printf '%s\n' "$scanned" | cut -d' ' -f2-)" ] \
+      || die "$ADDRESS now shows a different host key than the one pinned in $KNOWN_HOSTS; stop and find out why"
+  else
+    printf '%s\n' "$scanned" > "$KNOWN_HOSTS"
+    say "pinned host key $(ssh-keygen -lf "$KNOWN_HOSTS" | awk '{ print $2 }') (compare it at the machine with: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)"
+  fi
+
+  if key_works; then
+    say "key sign-in already works for $LOGIN@$ADDRESS"
+    return 0
+  fi
+  with_secrets "${FIRST_SIGN_IN_ARGS[@]}"
+  read_password
+  # SSH asks this helper for the password; it prints it from its own
+  # environment, never from a command line or a file.
+  local tmp pub
+  tmp="$(mktemp -d)"
+  # shellcheck disable=SC2064 # tmp is fixed now
+  trap "rm -rf '$tmp'" EXIT
+  printf '#!/bin/sh\nprintf "%%s\\n" "$HEADLESS_ASKPASS_SECRET"\n' > "$tmp/askpass"
+  chmod 0700 "$tmp/askpass"
+  pub="$(head -n 1 "$SSH_KEY.pub")"
+  printf '%s\n' "$pub" | HEADLESS_ASKPASS_SECRET="$PASSWORD" SSH_ASKPASS="$tmp/askpass" SSH_ASKPASS_REQUIRE=force \
+    ssh -o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no \
+      -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 \
+      -o ConnectTimeout=15 -o LogLevel=ERROR "$LOGIN@$ADDRESS" \
+      'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; IFS= read -r k; grep -qxF "$k" ~/.ssh/authorized_keys || printf "%s\n" "$k" >> ~/.ssh/authorized_keys' \
+    || die "password sign-in to $LOGIN@$ADDRESS failed; check the password in $PASSWORD_REF and that SSH allows $LOGIN to sign in with a password"
+  unset PASSWORD
+  key_works || die "your key was added but key sign-in still fails"
+  say "added your key to $LOGIN@$ADDRESS; key sign-in works"
+}
+
+# copy_remote: put the remote step scripts in ~/.headless/remote: the
+# shared ones (scripts/remote) and this platform's.
 copy_remote() {
-  tar -C "$REMOTE_SRC" -cf - . | on 'rm -rf ~/.headless/remote && mkdir -p -m 0700 ~/.headless/remote && tar -xf - -C ~/.headless/remote'
+  tar -cf - -C "$SCRIPTS/remote" . -C "$REMOTE_SRC" . | on 'rm -rf ~/.headless/remote && mkdir -p -m 0700 ~/.headless/remote && tar -xf - -C ~/.headless/remote'
 }
 
 # with_secrets "$@": run this script again with the admin password on
@@ -96,4 +141,148 @@ STDIN_MARK=--headless-stdin--
 as_root() {
   { printf '%s\n' "$PASSWORD"; [ -z "${EXTRA_STDIN-}" ] || printf '%s\n%s\n' "$STDIN_MARK" "$EXTRA_STDIN"; } \
     | on "sudo -S -p '' $1"
+}
+
+# new_config DIR OPTION...: new-config.sh's work, for each platform's
+# entry point. The caller sets EXTRAS (the platform's extras, all on unless
+# named with --extra-off) and TEMPLATE (a folder whose flake.nix and
+# machine.nix a new config folder starts with, or empty).
+new_config() {
+  local DIR="${1:?usage: new-config.sh DIR --address ADDRESS --login LOGIN --password-ref REF [options]}"
+  shift
+  local ADDRESS="" LOGIN="" PASSWORD_REF="" SSH_KEY="~/.ssh/id_ed25519" HOST_NAME=""
+  local AUTO_LOGIN=true KEY_ONLY=true TAILSCALE=false TAILSCALE_KEY_REF="" TAILSCALE_LOGIN_SERVER=""
+  local OFF=" " key_path PUBKEY f e v host_json=null extras_json=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --address) ADDRESS="${2-}"; shift 2 ;;
+      --login) LOGIN="${2-}"; shift 2 ;;
+      --password-ref) PASSWORD_REF="${2-}"; shift 2 ;;
+      --ssh-key) SSH_KEY="${2-}"; shift 2 ;;
+      --host-name) HOST_NAME="${2-}"; shift 2 ;;
+      --no-auto-login) AUTO_LOGIN=false; shift ;;
+      --keep-password-ssh) KEY_ONLY=false; shift ;;
+      --tailscale) TAILSCALE=true; shift ;;
+      --tailscale-key-ref) TAILSCALE_KEY_REF="${2-}"; shift 2 ;;
+      --tailscale-login-server) TAILSCALE_LOGIN_SERVER="${2-}"; shift 2 ;;
+      --extra-off)
+        [[ " ${EXTRAS[*]} " == *" ${2-} "* ]] || die "unknown extra '${2-}'; extras are ${EXTRAS[*]}"
+        OFF="$OFF${2} "; shift 2 ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+
+  [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "--address must be a plain address or name"
+  [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "--login must be a plain account name"
+  [ "$LOGIN" != root ] || die "--login must be an admin account other than root"
+  [ -n "$PASSWORD_REF" ] || die "--password-ref names the store entry holding the password"
+  [ -z "$HOST_NAME" ] || [[ "$HOST_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || die "--host-name must be letters, digits and dashes"
+  [ -z "$TAILSCALE_LOGIN_SERVER" ] || [[ "$TAILSCALE_LOGIN_SERVER" =~ ^https?://[A-Za-z0-9.:/_-]+$ ]] || die "--tailscale-login-server must be an http(s) address"
+  key_path="$SSH_KEY"
+  case "$key_path" in "~/"*) key_path="$HOME/${key_path#\~/}" ;; esac
+  [ -f "$key_path.pub" ] || die "$key_path.pub does not exist; make a key with ssh-keygen -t ed25519 first"
+  PUBKEY="$(cut -d' ' -f1-3 < "$key_path.pub" | head -n 1)"
+  [[ "$PUBKEY" =~ ^[a-z0-9@.-]+\ [A-Za-z0-9+/=]+(\ [^\"\\]*)?$ ]] || die "$key_path.pub is not a plain public key line"
+
+  mkdir -p "$DIR"
+  DIR="$(cd "$DIR" && pwd)"
+  case "$PASSWORD_REF" in
+    env:*)
+      f="${PASSWORD_REF#env:}"; f="${f%:*}"
+      case "$f" in "~/"*) f="$HOME/${f#\~/}" ;; esac
+      case "$(cd "$(dirname "$f")" 2> /dev/null && pwd)/" in
+        "$DIR"/*) die "keep the env file outside the config folder, so it is never copied or committed" ;;
+      esac ;;
+  esac
+
+  if [ -n "$TEMPLATE" ]; then
+    for f in flake.nix machine.nix; do
+      [ -e "$DIR/$f" ] || cp "$TEMPLATE/$f" "$DIR/$f"
+    done
+  fi
+
+  [ -z "$HOST_NAME" ] || host_json="\"$HOST_NAME\""
+  for e in "${EXTRAS[@]}"; do
+    v=true
+    [[ "$OFF" != *" $e "* ]] || v=false
+    extras_json="$extras_json${extras_json:+,}
+    \"$e\": $v"
+  done
+  cat > "$DIR/settings.json" <<JSON
+{
+  "user": "$LOGIN",
+  "hostName": $host_json,
+  "sshKeys": [
+    "$PUBKEY"
+  ],
+  "keyOnlySsh": $KEY_ONLY,
+  "autoLogin": $AUTO_LOGIN,
+  "tailscale": { "enable": $TAILSCALE },
+  "extras": {$extras_json
+  }
+}
+JSON
+
+  cat > "$DIR/headless.env" <<ENV
+# How the headless skill reaches this machine. No secret belongs here:
+# PASSWORD_REF only names the store entry that holds the password.
+ADDRESS=$ADDRESS
+LOGIN=$LOGIN
+SSH_KEY=$SSH_KEY
+PASSWORD_REF=$PASSWORD_REF
+TAILSCALE_KEY_REF=$TAILSCALE_KEY_REF
+TAILSCALE_LOGIN_SERVER=$TAILSCALE_LOGIN_SERVER
+ENV
+
+  if command -v git > /dev/null && git --version > /dev/null 2>&1; then
+    [ -d "$DIR/.git" ] || git -C "$DIR" init -q
+    git -C "$DIR" add -A
+  fi
+  echo "headless: config folder ready at $DIR"
+}
+
+# tailscale_join "$@": tailscale.sh's work, for each platform's entry
+# point, after load_config. The caller sets TS (the tailscale command on the
+# machine) and defines ts_check (stop unless the machine's settings turn
+# Tailscale on) and ts_host (print the name to join with).
+tailscale_join() {
+  need_key
+  ts_check
+  # shellcheck disable=SC2016 # runs on the machine
+  ts_state() { on "$TS"' status --json 2> /dev/null | sed -n "s/^[[:space:]]*\"BackendState\":[[:space:]]*\"\([A-Za-z]*\)\".*/\1/p" | head -n 1' || true; }
+  ts_ip4() { on "$TS ip -4" | head -n 1; }
+
+  if [ "${2-}" = --wait ]; then
+    local start=$SECONDS
+    while [ $((SECONDS - start)) -lt 600 ]; do
+      [ "$(ts_state)" = Running ] && { say "Tailscale connected: $(ts_ip4)"; exit 0; }
+      sleep 5
+    done
+    die "Tailscale is not connected after 10 minutes; run tailscale.sh again for a fresh link"
+  fi
+  if [ "$(ts_state)" = Running ]; then
+    say "Tailscale already connected: $(ts_ip4)"
+    exit 0
+  fi
+
+  NEED_TAILSCALE_KEY=1 with_secrets "$@"
+  read_password
+  local host server KEY
+  host="$(ts_host)"
+  copy_remote
+  server="${TAILSCALE_LOGIN_SERVER:--}"
+  if [ -n "$TAILSCALE_KEY_REF" ]; then
+    KEY=""
+    IFS= read -r KEY <&4 || true
+    exec 4<&-
+    [ -n "$KEY" ] || die "the store gave no Tailscale auth key for $TAILSCALE_KEY_REF"
+    EXTRA_STDIN="$KEY" as_root "/usr/bin/env bash ~/.headless/remote/tailscale.sh key $host $server" || die "Tailscale did not join with the auth key"
+    unset KEY PASSWORD
+    [ "$(ts_state)" = Running ] || die "Tailscale did not connect"
+    say "Tailscale connected: $(ts_ip4)"
+  else
+    as_root "/usr/bin/env bash ~/.headless/remote/tailscale.sh link $host $server" || die "Tailscale gave no sign-in link"
+    unset PASSWORD
+    say "open the link above and approve the machine, then run: tailscale.sh $CONFIG --wait"
+  fi
 }
