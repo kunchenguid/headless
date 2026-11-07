@@ -11,6 +11,14 @@
   > Other users > Add account > "I don't have this person's sign-in
   information" > "Add a user without a Microsoft account", then make it an
   administrator there.
+- **An account name the scripts can carry**: letters, digits, dots, dashes
+  and underscores, at most 20, in any case (Windows ignores case, and so
+  does the skill). A name with a space or another character, such as
+  `Alex Smith`, cannot go safely through SSH and the scripts, and
+  `new-config.sh` refuses it. Make another local administrator account
+  for the skill instead (Settings > Accounts > Other users > Add account,
+  as above, with a name like `headless`), with its own password in the
+  store; that account is the one that signs in by itself.
 - **OpenSSH Server installed and running**, from step W1's lines in
   Windows PowerShell run as administrator. If `Add-WindowsCapability`
   fails, the PC usually cannot reach Windows Update: check its network, or
@@ -86,8 +94,12 @@ as the admin account in its SSH session. Keep it safe to run again.
 
 `apply.sh` downloads Tailscale's own installer (pinned version, checked
 SHA-256) and installs it with unattended mode on, so it connects at
-start-up before anyone signs in. An existing Tailscale install is kept as
-it is. Then `tailscale.sh` joins as on a Mac (`references/tailscale.md`).
+start-up before anyone signs in. An existing Tailscale install is kept
+and not reinstalled; `apply.sh` sets the same unattended policy on it
+(`UnattendedMode` = `always` under `HKLM\SOFTWARE\Policies\Tailscale`),
+so it also runs before anyone signs in, as long as the skill's account is
+the one that joined it (see "When something fails"). Then `tailscale.sh`
+joins as on a Mac (`references/tailscale.md`).
 
 ## When something fails
 
@@ -102,10 +114,17 @@ it is. Then `tailscale.sh` joins as on a Mac (`references/tailscale.md`).
   or use another account.
 - **`apply.sh`: the password does not sign the account in.** The store
   holds an old password; the user updates it there and runs `apply.sh`
-  again. Nothing about automatic sign-in was changed.
+  again. `apply.sh` changed no setting.
 - **`restart.sh`: the account did not sign in by itself.** Check the
   password in the store and run `apply.sh` again. A PC joined to a domain,
   or with a sign-in notice set by policy, waits at the sign-in screen.
+- **Tailscale: "already in use by" or "running in server mode" for
+  another account.** Tailscale on Windows answers only the account that
+  joined it to the tailnet, so a Tailscale another account set up before
+  the skill cannot be read or joined by the skill's account, even after
+  that account logs out of it. Use that account for the skill, or have the
+  user uninstall Tailscale at the PC (Settings > Apps) and run `apply.sh`
+  and `tailscale.sh` again to install and join it as the skill's account.
 - **A changed host key** stops every step on purpose; ask the user whether
   Windows was reinstalled before removing the folder's `known_hosts`.
 

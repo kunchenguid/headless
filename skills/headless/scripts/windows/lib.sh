@@ -12,6 +12,11 @@ REMOTE_SRC="$SCRIPTS/windows/remote"
 # machine's record of its settings: readable by Administrators and SYSTEM only.
 WIN_HOME=C:/ProgramData/headless
 POWERSHELL="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass"
+# A Windows account name, in any case (Windows ignores case): up to 20
+# letters, digits, dots, dashes and underscores. A name with a space or
+# other characters cannot travel safely through SSH and these scripts.
+LOGIN_PATTERN='^[A-Za-z0-9_][A-Za-z0-9._-]{0,19}$'
+LOGIN_RULE="a Windows account name of up to 20 letters, digits, dots, dashes and underscores; for an account whose name has a space or other characters, make another administrator account (references/windows.md)"
 
 # ps_command SCRIPT: a command line that runs PowerShell SCRIPT on the
 # machine, the same under cmd.exe and under PowerShell (whichever is the
@@ -43,28 +48,31 @@ icacls $f /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" | Out-Null
 if ($LASTEXITCODE -ne 0) { exit 1 }
 ')"
 
-# copy_remote: put the remote step scripts (remote/*.ps1) in
-# C:\ProgramData\headless\remote, readable by Administrators and SYSTEM
-# only (and empty C:\ProgramData\headless\config).
-copy_remote() {
+# fresh_dir NAME: an empty C:\ProgramData\headless\NAME, the whole
+# C:\ProgramData\headless readable by Administrators and SYSTEM only.
+fresh_dir() {
   # shellcheck disable=SC2016 # runs on the machine
   win_ps '
 $d = Join-Path $env:ProgramData "headless"
 New-Item -ItemType Directory -Force -Path $d | Out-Null
 icacls $d /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
 if ($LASTEXITCODE -ne 0) { exit 1 }
-foreach ($s in "remote", "config") {
-  $p = Join-Path $d $s
-  if (Test-Path $p) { Remove-Item -Recurse -Force $p }
-  New-Item -ItemType Directory -Path $p | Out-Null
-}' || die "could not prepare $WIN_HOME on $ADDRESS"
+$p = Join-Path $d "'"$1"'"
+if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+New-Item -ItemType Directory -Path $p | Out-Null' || die "could not prepare $WIN_HOME/$1 on $ADDRESS"
+}
+# copy_remote: put the remote step scripts (remote/*.ps1) in
+# C:\ProgramData\headless\remote. It leaves the config folder's copy alone.
+copy_remote() {
+  fresh_dir remote
   tar_c -C "$REMOTE_SRC" . | on "tar -xf - -C $WIN_HOME/remote" || die "could not copy the scripts to $ADDRESS"
 }
-# copy_config: copy_remote, then the config folder into
+# copy_config: copy_remote, then the config folder into an emptied
 # C:\ProgramData\headless\config, without its git history, known_hosts and
 # headless.env.
 copy_config() {
   copy_remote
+  fresh_dir config
   tar_c -C "$CONFIG" --exclude .git --exclude known_hosts --exclude headless.env . \
     | on "tar -xf - -C $WIN_HOME/config" || die "could not copy $CONFIG to $ADDRESS"
 }

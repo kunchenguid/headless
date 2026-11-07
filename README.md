@@ -38,8 +38,10 @@ through:
 A Linux machine takes the same path, without the admin session: after the
 first sign-in, a machine on NixOS is applied as it is; on another
 distribution you choose between installing NixOS (the whole disk is erased)
-and keeping it with the script. A Windows PC starts with three lines you
-paste in an administrator PowerShell to turn OpenSSH Server on; after the
+and keeping it with the script. A Windows PC starts with a few lines you
+paste in an administrator PowerShell to turn OpenSSH Server on (and, on a
+home or office network Windows calls Public, to mark it Private so SSH gets
+through the firewall); after the
 first sign-in, applying the config sets key-only SSH, automatic sign-in
 (the password kept as an LSA secret), the extras and Tailscale.
 

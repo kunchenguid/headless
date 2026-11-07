@@ -30,8 +30,9 @@ $block = (Split-SshdConfig $text).Block
 Check (($block -join "`n") -eq ((Get-SshdBlock $s) -join "`n")) 'sshd_config starts with the headless block (sessions whose other end is gone end after about 3 minutes)'
 if ($s.keyOnlySsh) {
   $exe = (Get-CimInstance Win32_Service -Filter "Name='sshd'").PathName -replace '^"([^"]+)".*$', '$1' -replace '^(\S+\.exe).*$', '$1'
-  $t = & $exe -T 2> $null
-  if ($LASTEXITCODE -eq 0 -and $t) {
+  $r = Invoke-Sshd $exe @('-T')
+  $t = $r.Out
+  if ($r.Ok -and $t) {
     Check (($t -contains 'passwordauthentication no') -and ($t -contains 'kbdinteractiveauthentication no')) 'sshd: password sign-in off (sshd -T)'
   } else {
     NotApplicable 'sshd -T could not be read; verify.sh checks the server refuses a password'
@@ -96,6 +97,7 @@ if ($s.tailscale.enable) {
     Check ($svc -and $svc.Status -eq 'Running' -and $svc.StartType -eq 'Automatic') 'Tailscale service running, starts at start-up'
     Check ((Get-RegValue 'HKLM:\SOFTWARE\Policies\Tailscale' 'UnattendedMode') -eq 'always') 'Tailscale runs unattended (before anyone signs in)'
     if ($ts.State -eq 'Running') { Check $true "Tailscale connected: $($ts.Ip)" }
+    elseif ($ts.State -eq 'unknown') { Check $false "Tailscale connected (cannot read it: $($ts.Error))" }
     else { Check $false "Tailscale connected (it is $($ts.State); run tailscale.sh)" }
   }
 }

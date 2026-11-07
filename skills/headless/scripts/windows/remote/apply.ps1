@@ -53,6 +53,13 @@ $password = $null
 if ($s.autoLogin) {
   $password = [Console]::In.ReadLine()
   if ([string]::IsNullOrEmpty($password)) { Fail 'automatic sign-in is on, but no password came on standard input' }
+  # Checked before anything changes, so a wrong password changes nothing.
+  if (-not (Get-LocalUser -Name $Login -ErrorAction SilentlyContinue)) {
+    Fail "$Login is not a local account here; automatic sign-in needs a local account"
+  }
+  if (-not [Headless.Native]::CheckPassword($Login, $password)) {
+    Fail "the password in the store does not sign $Login in on this machine; nothing was changed"
+  }
 }
 
 # --- Host name (Windows takes a new name at the next restart).
@@ -67,12 +74,6 @@ if ($s.hostName -and $s.hostName -ne $names.Pending) {
 # password kept as the LSA secret DefaultPassword (never the plain-text
 # registry value of the same name).
 if ($s.autoLogin) {
-  if (-not (Get-LocalUser -Name $Login -ErrorAction SilentlyContinue)) {
-    Fail "$Login is not a local account here; automatic sign-in needs a local account"
-  }
-  if (-not [Headless.Native]::CheckPassword($Login, $password)) {
-    Fail "the password in the store does not sign $Login in on this machine; automatic sign-in was not changed"
-  }
   Set-Reg $Winlogon 'DefaultUserName' 'String' $Login "automatic sign-in account $Login"
   Set-Reg $Winlogon 'DefaultDomainName' 'String' $names.Pending "automatic sign-in domain $($names.Pending) (this computer)"
   Remove-Reg $Winlogon 'DefaultPassword' 'plain-text DefaultPassword removed from the registry'
@@ -123,7 +124,8 @@ if ($x.updatesOvernight) {
 }
 
 # --- Tailscale: Tailscale's own Windows installer, in unattended mode (it
-# runs before anyone signs in). An existing install is kept as it is.
+# runs before anyone signs in). An existing install is kept, and gets the
+# same unattended policy the installer would set.
 if ($s.tailscale.enable) {
   if (-not (Test-Path $TailscaleExe)) {
     $arch = @{ AMD64 = 'amd64'; ARM64 = 'arm64' }[$env:PROCESSOR_ARCHITECTURE]
@@ -140,6 +142,7 @@ if ($s.tailscale.enable) {
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail "the Tailscale installer failed (exit code $($p.ExitCode))" }
     Changed "Tailscale $TailscaleVersion installed, unattended"
   }
+  Set-Reg 'HKLM:\SOFTWARE\Policies\Tailscale' 'UnattendedMode' 'String' 'always' 'Tailscale runs unattended (before anyone signs in)'
   $svc = Get-Service -Name Tailscale -ErrorAction SilentlyContinue
   if (-not $svc) { Fail 'Tailscale is installed but has no Tailscale service' }
   if ($svc.StartType -ne 'Automatic') { Set-Service -Name Tailscale -StartupType Automatic; Changed 'Tailscale service starts at start-up' }
@@ -179,10 +182,10 @@ if (($parts.Block -join "`n") -ne ($block -join "`n")) {
   $new = (@($block) + @($parts.Rest)) -join "`r`n"
   $candidate = "$SshdConfig.headless-new"
   [IO.File]::WriteAllText($candidate, $new)
-  $out = & $sshdExe -t -f $candidate 2>&1 | Out-String
-  if ($LASTEXITCODE -ne 0) {
+  $t = Invoke-Sshd $sshdExe @('-t', '-f', "`"$candidate`"")
+  if (-not $t.Ok) {
     Remove-Item $candidate
-    Fail "sshd rejected the new sshd_config, which was not changed: $out"
+    Fail "sshd rejected the new sshd_config, which was not changed: $($t.Err)"
   }
   if (-not (Test-Path "$SshdConfig.before-headless") -and (Test-Path $SshdConfig)) {
     Copy-Item $SshdConfig "$SshdConfig.before-headless"

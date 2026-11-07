@@ -213,7 +213,9 @@ function Read-Settings([string]$Path, [string]$Login) {
   }
   $s = [ordered]@{}
   $s.user = [string]$j.user
-  if ($s.user -notmatch '^[a-z_][a-z0-9_-]*$') { Fail 'settings.json: user is not a plain account name' }
+  # Same rule as LOGIN_PATTERN in windows/lib.sh; -notmatch and -ne ignore
+  # case, as Windows does for account names.
+  if ($s.user -notmatch '^[A-Za-z0-9_][A-Za-z0-9._-]{0,19}$') { Fail 'settings.json: user must be a Windows account name of up to 20 letters, digits, dots, dashes and underscores' }
   if ($s.user -ne $Login) { Fail "settings.json names the user $($s.user), but headless.env signs in as $Login" }
   $s.hostName = $j.hostName
   if ($null -ne $s.hostName -and ([string]$s.hostName) -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,14}$') {
@@ -293,11 +295,36 @@ function Get-ComputerNames {
   }
 }
 
+# Invoke-Sshd EXE ARGS: run sshd (-t or -T) with its output in files:
+# piped, Windows' sshd waits on a config it rejects, and Windows PowerShell
+# stops at the first error line. Ok when it exits 0 within a minute; Out
+# its output lines, Err its messages.
+function Invoke-Sshd([string]$Exe, [string[]]$Arguments) {
+  $log = Join-Path $HeadlessHome ('sshd-' + [guid]::NewGuid().ToString('N'))
+  try {
+    $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru -RedirectStandardOutput "$log.out" -RedirectStandardError "$log.err"
+    $null = $p.Handle
+    $ok = $p.WaitForExit(60000) -and $p.ExitCode -eq 0
+    if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit() }
+    return @{
+      Ok = $ok
+      Out = @([IO.File]::ReadAllLines("$log.out"))
+      Err = ([IO.File]::ReadAllText("$log.err") -replace '\\\\', '\').Trim()
+    }
+  } finally { Remove-Item -Force "$log.out", "$log.err" -ErrorAction SilentlyContinue }
+}
+
 # Tailscale's state: BackendState (Running when connected) and its IPv4.
 function Get-TailscaleState {
   if (-not (Test-Path $TailscaleExe)) { return $null }
-  $raw = & $TailscaleExe status --json 2> $null | Out-String
-  try { $st = $raw | ConvertFrom-Json } catch { return @{ State = 'unknown'; Ip = ''; AuthUrl = '' } }
+  # Windows PowerShell stops at a redirected error line under 'Stop'.
+  $ErrorActionPreference = 'Continue'
+  $out = @(& $TailscaleExe status --json 2>&1)
+  $err = ($out | Where-Object { $_ -is [Management.Automation.ErrorRecord] }) -join ' '
+  $st = $null
+  try { $st = ($out | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) -join "`n" | ConvertFrom-Json } catch { }
+  # Such as "Tailscale already in use by" another account signed in at the PC.
+  if (-not $st) { return @{ State = 'unknown'; Ip = ''; AuthUrl = ''; Error = "$err" } }
   $ip = ''
   if ($st.Self -and $st.Self.TailscaleIPs) { $ip = @($st.Self.TailscaleIPs | Where-Object { $_ -match '^\d+\.' })[0] }
   return @{ State = [string]$st.BackendState; Ip = [string]$ip; AuthUrl = [string]$st.AuthURL }

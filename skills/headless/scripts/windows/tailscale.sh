@@ -17,8 +17,12 @@
 load_config "${1-}"
 need_key
 copy_remote
-ts_state() { run_remote tailscale -Mode state < /dev/null 2> /dev/null | tr -d '\r' | tail -n 1; }
-state="$(ts_state)"
+# ts_state: "off", "<BackendState> <IP>", or nothing when it cannot be read
+# (such as a dropped connection while waiting).
+ts_state() { run_remote tailscale -Mode state < /dev/null 2> /dev/null | tr -d '\r' | tail -n 1 || true; }
+# The first read shows the machine's own reason when it fails.
+state="$(run_remote tailscale -Mode state < /dev/null | tr -d '\r' | tail -n 1)" \
+  || die "could not read Tailscale's state on $ADDRESS"
 [ "$state" != off ] || die "Tailscale is off on $ADDRESS; set \"tailscale\": { \"enable\": true } in settings.json and run apply.sh"
 
 if [ "${2-}" = --wait ]; then

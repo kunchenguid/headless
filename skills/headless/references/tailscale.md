@@ -41,7 +41,12 @@ The same settings and the same two ways to join, with
 `scripts/windows/tailscale.sh`. `apply.sh` installs Tailscale from its own
 installer (pinned version, checked SHA-256) in unattended mode, so it runs
 as a service and connects at start-up before anyone signs in. An existing
-Tailscale install is kept as it is; the skill does not reinstall it.
+Tailscale install is kept and not reinstalled; `apply.sh` sets the same
+unattended policy on it (`UnattendedMode` = `always` under
+`HKLM\SOFTWARE\Policies\Tailscale`), so it too runs before anyone signs in.
+Tailscale on Windows answers only the account that joined it, so this
+works when the skill's account set it up; `references/windows.md` says
+what to do when another account did.
 
 ## Another control server
 

@@ -22,6 +22,10 @@ NIX=/nix/var/nix/profiles/default/bin/nix
 die() { echo "headless: $*" >&2; exit 1; }
 say() { echo "headless: $*"; }
 
+# Which account names LOGIN may be; Windows sets its own.
+LOGIN_PATTERN='^[a-z_][a-z0-9_-]*$'
+LOGIN_RULE="a plain account name"
+
 # load_config DIR: read DIR/headless.env into ADDRESS, LOGIN, SSH_KEY,
 # PASSWORD_REF, TAILSCALE_KEY_REF and TAILSCALE_LOGIN_SERVER, and set the
 # SSH options every step uses.
@@ -38,7 +42,7 @@ load_config() {
   TAILSCALE_LOGIN_SERVER="$(conf TAILSCALE_LOGIN_SERVER)"
   case "$SSH_KEY" in "~/"*) SSH_KEY="$HOME/${SSH_KEY#\~/}" ;; esac
   [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "ADDRESS in headless.env is not a plain address"
-  [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "LOGIN in headless.env is not a plain account name"
+  [[ "$LOGIN" =~ $LOGIN_PATTERN ]] || die "LOGIN in headless.env must be $LOGIN_RULE"
   [ -f "$SSH_KEY" ] && [ -f "$SSH_KEY.pub" ] || die "SSH_KEY $SSH_KEY or its .pub is missing"
   # Every step signs in without prompts, so a key with a passphrase must be
   # loaded in ssh-agent.
@@ -196,7 +200,7 @@ new_config() {
   done
 
   [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "--address must be a plain address or name"
-  [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "--login must be a plain account name"
+  [[ "$LOGIN" =~ $LOGIN_PATTERN ]] || die "--login must be $LOGIN_RULE"
   [ "$LOGIN" != root ] || die "--login must be an admin account other than root"
   [ -n "$PASSWORD_REF" ] || die "--password-ref names the store entry holding the password"
   [ -z "$HOST_NAME" ] || [[ "$HOST_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || die "--host-name must be letters, digits and dashes"

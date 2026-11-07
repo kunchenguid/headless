@@ -19,6 +19,7 @@ if (-not $on) {
 }
 $ts = Get-TailscaleState
 if ($null -eq $ts) { Fail 'Tailscale is not installed; run apply.sh with Tailscale on first' }
+if ($ts.State -eq 'unknown') { Fail "cannot read Tailscale's state: $($ts.Error)" }
 if ($Mode -eq 'state') { "$($ts.State) $($ts.Ip)"; exit 0 }
 
 $names = Get-ComputerNames

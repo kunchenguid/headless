@@ -315,6 +315,10 @@ and failure cases are in `references/windows.md`.
 to confirm, at the PC, that it has a **local administrator account with a
 password** (not a Microsoft account: automatic sign-in and SSH need a local
 one), and its **address** (Settings > Network & internet > Properties).
+The account's name may use letters, digits, dots, dashes and underscores
+(at most 20; case does not matter). If its name has a space or any other
+character, the skill cannot use it: ask the user to make another local
+administrator account for it, such as `headless` (`references/windows.md`).
 Then ask them to open **Windows PowerShell as administrator** (right-click
 Start > Terminal (Admin)) and paste these lines, which install and start
 OpenSSH Server:
@@ -343,7 +347,9 @@ Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private
 **W3. The config folder.** Same questions as step 3, with Windows's extras,
 each **on**: `neverSleep`, `powerButtonShutsDown`, `hideSleep`,
 `updatesOvernight` (`references/windows.md` says what each does). A
-Windows host name is at most 15 characters.
+Windows host name is at most 15 characters. `--login` takes the account
+name as Windows shows it, in any case; a name with a space is refused, so
+use the other administrator account from W1.
 
 ```sh
 $SKILL/scripts/windows/new-config.sh ~/headless/pc \
@@ -367,7 +373,9 @@ on, it pipes the password from the store and Windows keeps it as an LSA
 secret, never as plain text in the registry; any administrator of the PC
 can still read it back (say so). Commit the folder afterwards. For
 Tailscale, run `$SKILL/scripts/windows/tailscale.sh ~/headless/pc` as in
-step 6; an existing Tailscale install is kept as it is.
+step 6; an existing Tailscale install is kept, and `apply.sh` sets its
+unattended policy so it runs before anyone signs in (if another account
+joined it, see `references/windows.md`).
 
 **W6. Verify, restart, verify.**
 
