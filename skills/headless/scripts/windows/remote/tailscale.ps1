@@ -20,9 +20,20 @@ if ($Mode -eq 'uninstall') {
   $here = @("$env:SSH_CONNECTION" -split ' ')[2]
   $tsAddresses = @(Get-NetIPAddress -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -like 'Tailscale*' } | ForEach-Object { $_.IPAddress -replace '%.*$', '' })
   if ($here -and $tsAddresses -contains ($here -replace '%.*$', '')) { Fail "this SSH session reaches the PC over Tailscale ($here); uninstall over the PC's local network address instead" }
-  $apps = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty |
-      Where-Object { $_.DisplayName -eq 'Tailscale' -and $_.WindowsInstaller -eq 1 })
-  foreach ($a in $apps) {
+  # Its Settings > Apps entries: Tailscale's setup program leaves its own
+  # entry beside the Windows Installer one; the pinned installer only that.
+  $entries = { @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+      Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Tailscale' }) }
+  $setups = @(& $entries | Where-Object { $_.BundleCachePath -and (Test-Path $_.BundleCachePath) })
+  # Without an uninstaller, a restart would not help.
+  if (-not $setups -and -not @(& $entries | Where-Object { $_.WindowsInstaller -eq 1 }) -and ((Test-Path $TailscaleExe) -or (& $entries))) {
+    Fail "no Tailscale uninstaller found, but Tailscale is still listed or $TailscaleExe is there; remove it at the PC (Settings > Apps, or delete the Tailscale folder in Program Files), then run tailscale.sh --uninstall again"
+  }
+  foreach ($a in $setups) {
+    $p = Start-Process -FilePath $a.BundleCachePath -Wait -PassThru -ArgumentList '/uninstall', '/quiet', '/norestart'
+    if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail "Tailscale's uninstaller failed (exit code $($p.ExitCode))" }
+  }
+  foreach ($a in @(& $entries | Where-Object { $_.WindowsInstaller -eq 1 })) {
     $p = Start-Process -FilePath msiexec.exe -Wait -PassThru -ArgumentList '/x', $a.PSChildName, '/quiet', '/norestart'
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { Fail "the Tailscale uninstaller failed (exit code $($p.ExitCode))" }
   }
@@ -30,6 +41,7 @@ if ($Mode -eq 'uninstall') {
   $state = Join-Path $env:ProgramData 'Tailscale'
   Remove-Item -Recurse -Force $state -ErrorAction SilentlyContinue
   $left = @($TailscaleExe, $state | Where-Object { Test-Path $_ })
+  if (& $entries) { $left += 'its entry in Settings > Apps' }
   if ($left) { Fail "Tailscale is not fully removed ($($left -join ', ') still there); restart the PC (restart.sh) and run tailscale.sh --uninstall again" }
   'Tailscale uninstalled'
   exit 0

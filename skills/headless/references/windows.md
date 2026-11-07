@@ -110,12 +110,15 @@ adapter (or "not connected"), and `tailscale.sh` says the same. If the
 user wants the skill's account to own it instead, ask first, then run
 `tailscale.sh DIR --uninstall` over the PC's local network address (not
 its Tailscale one; it refuses a session that comes over Tailscale). It
-uninstalls Tailscale and removes its state in `C:\ProgramData\Tailscale`,
-which disconnects the PC from the tailnet. Then `apply.sh` installs it
-again and `tailscale.sh` joins it as the skill's account. If files are
-left over, it says to restart the PC (`restart.sh`) and run it again. The
-tailnet keeps the old entry, offline, for the user to remove in its admin
-console.
+uninstalls Tailscale (with its own uninstaller, whether it came from
+Tailscale's download page or from `apply.sh`) and removes its state in
+`C:\ProgramData\Tailscale`, which disconnects the PC from the tailnet.
+Then `apply.sh` installs it again and `tailscale.sh` joins it as the
+skill's account. If files are left over, it says to restart the PC
+(`restart.sh`) and run it again. If Tailscale has no uninstaller on the PC,
+it says so and changes nothing: the user removes it at the PC (Settings >
+Apps), and a restart would not help. The tailnet keeps the old entry,
+offline, for the user to remove in its admin console.
 
 ## When something fails
 
