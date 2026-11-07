@@ -95,7 +95,8 @@ tar_c() {
   fi
 }
 
-# copy_remote: put the remote step scripts in ~/.headless/remote.
+# copy_remote: put the remote step scripts in ~/.headless/remote: the
+# shared ones (scripts/remote) and Linux's.
 copy_remote() {
-  tar_c -C "$REMOTE_SRC" . | on 'rm -rf ~/.headless/remote && mkdir -p -m 0700 ~/.headless/remote && tar -xf - -C ~/.headless/remote'
+  tar_c -C "$SCRIPTS/remote" . -C "$REMOTE_SRC" . | on 'rm -rf ~/.headless/remote && mkdir -p -m 0700 ~/.headless/remote && tar -xf - -C ~/.headless/remote'
 }

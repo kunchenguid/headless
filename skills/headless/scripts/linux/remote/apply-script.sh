@@ -99,7 +99,8 @@ if [ "$(cat "$dropin" 2> /dev/null || true)" != "$want" ]; then
 fi
 eff="$("$sshd" -T -C "user=$LOGIN,host=headless-check,addr=127.0.0.1" 2> /dev/null)"
 if [ "$KEY_ONLY" = true ]; then
-  grep -qx 'passwordauthentication no' <<< "$eff" || die "sshd still allows password sign-in; another setting overrides $dropin"
+  # sshd -T prints names in lower case before OpenSSH 10.5, as written after.
+  grep -qix 'passwordauthentication no' <<< "$eff" || die "sshd still allows password sign-in; another setting overrides $dropin"
 fi
 
 # --- Host name. ---

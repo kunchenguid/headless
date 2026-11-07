@@ -9,8 +9,10 @@ let
   disk = "/dev/sda";
 in
 {
-  # Written by install-nixos.sh from the machine itself.
-  imports = lib.optional (builtins.pathExists ./hardware-configuration.nix) ./hardware-configuration.nix;
+  # Written by install-nixos.sh from the machine itself: its hardware, and
+  # its fixed address when it had one that did not come from DHCP.
+  imports = lib.optional (builtins.pathExists ./hardware-configuration.nix) ./hardware-configuration.nix
+    ++ lib.optional (builtins.pathExists ./network.nix) ./network.nix;
 
   # GRUB on a GPT disk with both a BIOS boot partition and an EFI system
   # partition, so the same layout starts on BIOS and UEFI machines.

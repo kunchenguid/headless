@@ -194,6 +194,16 @@ expose the host as `darwinConfigurations.machine` in a folder these scripts
 copy; the scripts only need `headless.env` and that output name. See
 `references/mac.md` for the module's options.
 
+On NixOS it works the same way: the folder's `flake.nix` exposes
+`nixosConfigurations.machine`, which imports
+`headless.nixosModules.headless` and sets `headless.*`
+(`references/linux.md` lists the options). A folder with its own
+`flake.nix` is used as it is: `apply.sh` copies and builds it and brings
+nothing in from `/etc/nixos`. Keep `settings.json` (from `new-config.sh`)
+beside it: `apply.sh` checks it and `verify.sh` reads the machine's own
+record. Expose the host under its host name too if `nixos-rebuild switch`
+at the machine should find it without `--flake /etc/nixos#machine`.
+
 ## When something fails
 
 - Read the script's last `headless:` line; it says what failed and what to
@@ -235,13 +245,18 @@ what comes next.
 
 - **It runs NixOS:** go to L6. The first `apply.sh` copies the machine's own
   `/etc/nixos` into the folder (`nixos/`), so its boot loader, disks and
-  other settings stay; ask the user to check it holds nothing private before
-  they push the folder anywhere.
+  other settings stay, and the machine stays on the NixOS release it runs
+  (such as 26.05). Ask the user to check that copy holds nothing private
+  before they push the folder anywhere. From then on each `apply.sh` puts
+  the folder in `/etc/nixos` (the old one is kept as
+  `/etc/nixos.before-headless`), so `nixos-rebuild switch` and automatic
+  updates at the machine build the same setup.
 - **Any other distribution:** offer to **replace it with NixOS**, using
   nixos-anywhere. Say plainly: this **erases the whole disk**, everything on
   it is gone, and it needs Nix on this computer, an x86_64 or aarch64
   machine with 2 GB of memory and Secure Boot off. The machine keeps its
-  address, SSH host key and the account's password. If the user agrees:
+  address (a fixed one is written into the new setup), SSH host key and the
+  account's password. If the user agrees:
 
   ```sh
   $SKILL/scripts/linux/install-nixos.sh ~/headless/box --list-disks
@@ -273,4 +288,4 @@ Tell the user before restarting.
 Updates: edit `settings.json` (or `machine.nix` on NixOS) and run `apply.sh`
 and `verify.sh` again. Other distributions install updates by themselves
 (`autoUpdates`). On NixOS, delete `flake.lock` and run `apply.sh` to move
-to newer inputs.
+to newer inputs on the same release.

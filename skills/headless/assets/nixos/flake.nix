@@ -7,13 +7,21 @@
     disko.follows = "headless/disko";
   };
 
-  outputs = { headless, nixpkgs, disko, ... }: {
-    nixosConfigurations.machine = nixpkgs.lib.nixosSystem {
-      modules = [
-        disko.nixosModules.disko
-        headless.nixosModules.headless
-        ./machine.nix
-      ];
+  outputs = { headless, nixpkgs, disko, ... }:
+    let
+      machine = nixpkgs.lib.nixosSystem {
+        modules = [
+          disko.nixosModules.disko
+          headless.nixosModules.headless
+          ./machine.nix
+        ];
+      };
+      name = machine.config.networking.hostName;
+    in
+    {
+      # `machine` for the skill's apply step; under the host name too, which
+      # nixos-rebuild looks for when it builds /etc/nixos on the machine.
+      nixosConfigurations = { inherit machine; }
+        // nixpkgs.lib.optionalAttrs (name != "" && name != "machine") { ${name} = machine; };
     };
-  };
 }

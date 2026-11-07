@@ -69,10 +69,16 @@ jobs:
 
   install:
     # nixos-anywhere replaces an x86_64 Ubuntu virtual machine's system with
-    # NixOS (UEFI firmware, whole disk), then the journey applies, restarts
-    # and verifies it.
+    # NixOS (whole disk), then the journey applies, restarts and verifies
+    # it. The install layout boots on both kinds of firmware, so it runs
+    # once with UEFI and once with legacy BIOS (SeaBIOS).
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware: [uefi, bios]
+    name: install (${{ matrix.firmware }})
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
@@ -113,13 +119,17 @@ jobs:
             echo '      type: text'
           } > user-data
           cloud-localds seed.img user-data
-          cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+          firmware=()
+          if [ "${{ matrix.firmware }}" = uefi ]; then
+            cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+            firmware=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd
+              -drive if=pflash,format=raw,file=vars.fd)
+          fi
           # The machine answers on its own address, 127.0.0.2, port 22.
           sudo systemctl stop ssh.socket ssh.service 2> /dev/null || true
           sudo sysctl -q net.ipv4.ip_unprivileged_port_start=22
           nohup qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4096 -nographic \
-            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-            -drive if=pflash,format=raw,file=vars.fd \
+            ${firmware[@]+"${firmware[@]}"} \
             -drive if=virtio,file=disk.qcow2 -drive if=virtio,format=raw,file=seed.img \
             -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.2:22-:22 > vm.log 2>&1 &
           for _ in $(seq 120); do
@@ -133,6 +143,13 @@ jobs:
         run: |
           SSH_KEY=~/.ssh/headless_test tests/linux-journey.sh 127.0.0.2 headless \
             "$RUNNER_TEMP/secrets/vm.env" "$RUNNER_TEMP/vm-config" --install /dev/vda --restart -- --host-name headless-ci
+      - name: The machine started the way its firmware does
+        run: |
+          set -euo pipefail
+          efi="$(ssh -i ~/.ssh/headless_test -o UserKnownHostsFile="$RUNNER_TEMP/vm-config/known_hosts" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes headless@127.0.0.2 'test -d /sys/firmware/efi && echo uefi || echo bios')"
+          echo "the installed NixOS started with $efi firmware"
+          [ "$efi" = "${{ matrix.firmware }}" ]
       - name: The password is in no log
         if: always()
         run: |

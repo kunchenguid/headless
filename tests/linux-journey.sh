@@ -43,9 +43,10 @@ if [ -n "$DISK" ]; then
   step "$LINUX/verify.sh" "$DIR"
 fi
 # Apply a NixOS machine against this checkout; the script path takes no source.
+# connect.sh said which system the machine runs (a new sign-in right after
+# it may be held back by the server's own penalty for the first key try).
 src=()
-if ssh -i "${SSH_KEY:-$HOME/.ssh/id_ed25519}" -o UserKnownHostsFile="$DIR/known_hosts" -o StrictHostKeyChecking=yes \
-  -o BatchMode=yes "$LOGIN@$ADDRESS" 'grep -qx ID=nixos /etc/os-release'; then
+if [ -n "$DISK" ] || grep -q '^headless: .* runs NixOS ' "$log"; then
   src=(--headless-source "$ROOT")
 fi
 step "$LINUX/apply.sh" "$DIR" ${src[@]+"${src[@]}"}

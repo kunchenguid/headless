@@ -8,9 +8,10 @@
 let
   cfg = config.headless;
   inherit (lib) mkOption types;
-  # Above a plain definition (100), so a machine's own configuration.nix
-  # that says otherwise does not stop the switch; below lib.mkForce (50), so
-  # a deliberate choice in machine.nix still wins.
+  # Every value the module sets uses this: above a plain definition (100),
+  # so a machine's own configuration.nix that says otherwise does not stop
+  # the build with conflicting values; below lib.mkForce (50), so a
+  # deliberate choice in machine.nix still wins.
   headlessWins = lib.mkOverride 90;
   bool = b: if b then "true" else "false";
 in
@@ -87,7 +88,7 @@ in
       isNormalUser = lib.mkDefault true;
       extraGroups = [ "wheel" ];
       openssh.authorizedKeys.keys = cfg.sshKeys;
-      linger = cfg.autoLogin;
+      linger = headlessWins cfg.autoLogin;
     };
     # Every admin step pipes the password to sudo; the machine keeps no
     # passwordless admin rule.
@@ -95,15 +96,19 @@ in
 
     # The skill's apply step builds the config with flakes on the machine.
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    # apply.sh keeps a copy of the config folder in /etc/nixos, so the
+    # machine's own updates (system.autoUpgrade, or nixos-rebuild switch at
+    # the machine) build the same system instead of an older configuration.
+    system.autoUpgrade.flake = lib.mkDefault "/etc/nixos#machine";
 
     # SSH is the only way in. End sessions whose other end is gone after
     # about three minutes, so they never fill the connection limit.
     services.openssh = {
-      enable = true;
+      enable = headlessWins true;
       settings = lib.mkMerge [
         {
-          ClientAliveInterval = 60;
-          ClientAliveCountMax = 3;
+          ClientAliveInterval = headlessWins 60;
+          ClientAliveCountMax = headlessWins 3;
         }
         (lib.mkIf cfg.keyOnlySsh {
           PasswordAuthentication = headlessWins false;
@@ -113,16 +118,17 @@ in
       ];
     };
 
-    networking.hostName = lib.mkIf (cfg.hostName != null) cfg.hostName;
+    networking.hostName = lib.mkIf (cfg.hostName != null) (headlessWins cfg.hostName);
 
     systemd.targets = lib.mkIf cfg.extras.neverSleep {
-      sleep.enable = false;
-      suspend.enable = false;
-      hibernate.enable = false;
-      hybrid-sleep.enable = false;
+      sleep.enable = headlessWins false;
+      suspend.enable = headlessWins false;
+      hibernate.enable = headlessWins false;
+      hybrid-sleep.enable = headlessWins false;
     };
 
-    services.tailscale.enable = cfg.tailscale.enable;
+    # Off leaves Tailscale as the machine's own config has it.
+    services.tailscale.enable = lib.mkIf cfg.tailscale.enable (headlessWins true);
 
     # What this machine should be, for the skill's verify step to read
     # (the same file the distro-neutral script writes).

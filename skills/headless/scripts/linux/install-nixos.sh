@@ -15,8 +15,9 @@
 # Needs Nix on this computer (it runs nixos-anywhere) and an x86_64 or
 # aarch64 machine with at least 2 GB of memory and Secure Boot off. The
 # machine keeps its SSH host key, its address and the admin account's
-# password; the admin's SSH key keeps working. DIR gets the NixOS config
-# (flake.nix, machine.nix, system.nix, hardware-configuration.nix and
+# password (a fixed address goes into network.nix); the admin's SSH key
+# keeps working. DIR gets the NixOS config (flake.nix, machine.nix,
+# system.nix, hardware-configuration.nix, network.nix if any, and
 # flake.lock); commit it. Run connect.sh first.
 # shellcheck source=skills/headless/scripts/linux/lib.sh
 . "$(dirname "$0")/lib.sh"
@@ -72,14 +73,58 @@ if [ ! -e "$CONFIG/system.nix" ]; then
 fi
 grep -q '^  disk = "' "$CONFIG/system.nix" || die "$CONFIG/system.nix is not the install layout (it has no disk line)"
 sed -i.bak "s|^  disk = \".*\";|  disk = \"$DISK\";|" "$CONFIG/system.nix" && rm -f "$CONFIG/system.nix.bak"
-if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
-if [ -n "$SOURCE" ]; then
-  "${NIXF[@]}" flake lock --override-input headless "$(flake_ref "$SOURCE")" "$(flake_ref "$CONFIG")" || die "could not lock the config against $SOURCE"
-fi
 
 set -- "$CONFIG" --disk "$DISK" --yes-wipe ${SOURCE:+--headless-source "$SOURCE"}
 with_secrets "$@"
 read_password
+
+# The address this computer reaches the machine at. One the machine set
+# itself (not from DHCP) goes into network.nix, so the new system keeps it;
+# a DHCP address comes back from DHCP.
+# shellcheck disable=SC2016 # runs on the machine
+net="$(on 'set -- $SSH_CONNECTION; a="$3"
+  line="$(ip -4 -o addr show | awk -v a="$a" "{ split(\$4, p, \"/\"); if (p[1] == a) print }" | head -n 1)"
+  [ -n "$line" ] || exit 0
+  dev="$(printf "%s\n" "$line" | awk "{ print \$2 }")"
+  case "$line" in *" dynamic"*) echo dhcp; exit 0 ;; esac
+  echo "static $(printf "%s\n" "$line" | awk "{ print \$4 }") $(cat "/sys/class/net/$dev/address")"
+  ip -4 route show default dev "$dev" | awk "/^default via/ { print \"gateway \" \$3; exit }"
+  r=/etc/resolv.conf; [ ! -r /run/systemd/resolve/resolv.conf ] || r=/run/systemd/resolve/resolv.conf
+  awk "/^nameserver [0-9.]+\$/ && \$2 !~ /^127\\./ { print \"dns \" \$2 }" "$r"')" \
+  || die "could not read $ADDRESS's network settings"
+rm -f "$CONFIG/network.nix"
+case "$net" in
+  static\ *)
+    read -r _ cidr mac <<< "$(printf '%s\n' "$net" | head -n 1)"
+    gw="$(printf '%s\n' "$net" | sed -n 's/^gateway //p' | head -n 1)"
+    dns="$(printf '%s\n' "$net" | sed -n 's/^dns //p' | sed 's/.*/"&"/' | tr '\n' ' ')"
+    [[ "$cidr" =~ ^[0-9.]+/[0-9]+$ ]] && [[ "$mac" =~ ^[0-9a-f:]{17}$ ]] && [[ "$gw" =~ ^[0-9.]*$ ]] \
+      || die "could not read $ADDRESS's fixed address ($net)"
+    gws=""
+    [ -z "$gw" ] || gws="\"$gw\" "
+    cat > "$CONFIG/network.nix" <<NIX
+# The fixed address this machine had before NixOS was installed (it did not
+# come from DHCP), on the network card with this hardware address. Written
+# by install-nixos.sh.
+{
+  networking.useNetworkd = true;
+  systemd.network.networks."10-headless-fixed" = {
+    matchConfig.MACAddress = "$mac";
+    address = [ "$cidr" ];
+    gateway = [ $gws];
+    dns = [ $dns];
+  };
+}
+NIX
+    "${NIXF[@]}" eval --json --file "$CONFIG/network.nix" > /dev/null || die "could not write $CONFIG/network.nix"
+    say "$ADDRESS has a fixed address ($cidr${gw:+, gateway $gw}); the new system keeps it (network.nix)" ;;
+  dhcp) say "$ADDRESS's address comes from DHCP; the new system asks DHCP again" ;;
+  *) say "could not tell where $ADDRESS's address comes from; the new system asks DHCP" ;;
+esac
+if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
+if [ -n "$SOURCE" ]; then
+  "${NIXF[@]}" flake lock --override-input headless "$(flake_ref "$SOURCE")" "$(flake_ref "$CONFIG")" || die "could not lock the config against $SOURCE"
+fi
 
 # The account's password carries over: its hash goes to the new system in a
 # root-only file (system.nix reads it when it first makes the account).

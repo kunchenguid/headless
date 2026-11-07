@@ -29,7 +29,7 @@ the module's options (`modules/nixos/headless.nix`, exported as
 | `autoLogin` | `true` | The account's session starts at boot (systemd lingering), so its user services run with nobody signed in. Nothing signs in on a screen. |
 | `tailscale.enable` | `false` | Run the Tailscale daemon (on the script path, from Tailscale's own signed package repository). |
 | `extras.neverSleep` | `true` | Sleep, suspend and hibernate are masked. |
-| `extras.autoUpdates` | `true` | Script path: unattended-upgrades (apt) or dnf5-automatic applying updates. NixOS: nothing; updates come from the config folder. |
+| `extras.autoUpdates` | `true` | Script path: unattended-upgrades (apt) or dnf5-automatic applying updates. NixOS: nothing; updates come from the config folder, or from the machine's own `system.autoUpgrade`, which builds the same setup. |
 
 Always on: SSH ends sessions whose other end is gone after about three
 minutes, and `/etc/headless/settings.env` records what the machine should
@@ -48,11 +48,34 @@ installed packages stay.
 
 On a machine that already runs NixOS, the first `apply.sh` copies its
 `/etc/nixos` into `nixos/` in the folder and writes `system.nix`, which
-imports it; the machine's `/etc/nixos` is no longer used. It may hold
-private things (passwords set in `configuration.nix`, Wi-Fi keys); the
-user should check before pushing the folder anywhere. If `/etc/nixos` is
-already a flake, `apply.sh` stops: add `headless.nixosModules.headless` to
-that flake instead and expose it as `nixosConfigurations.machine`.
+imports it. That copy may hold private things (passwords set in
+`configuration.nix`, Wi-Fi keys); the user should check before pushing the
+folder anywhere.
+
+The machine stays on the NixOS release it runs: the folder's `flake.nix`
+follows that release's nixpkgs branch (`nixos-26.05` on a 26.05 machine,
+`nixos-unstable` on unstable). Moving to a newer release is the user's
+choice: change that line and run `apply.sh`.
+
+After each switch `apply.sh` writes the folder to the machine's
+`/etc/nixos`, with a `HEADLESS.md` saying so; the first time, the old
+folder moves to `/etc/nixos.before-headless`. So `sudo nixos-rebuild
+switch` at the machine, and `system.autoUpgrade` if the machine's own
+config turns it on, build the skill's setup instead of the older
+`configuration.nix` alone (the module points `system.autoUpgrade.flake` at
+`/etc/nixos#machine`; the flake also answers to the host name). Edits
+made in `/etc/nixos` are replaced at the next apply; make them in the
+config folder. If `/etc/nixos` is
+already a flake, `apply.sh` stops: put that flake in the config folder
+instead (its `flake.nix` at the top), add `headless.nixosModules.headless`
+to it and expose the host as `nixosConfigurations.machine` ("Your own
+config" in SKILL.md). A folder with its own `flake.nix` is used as it is.
+
+The template's `system.nix` holds install-nixos.sh's disk layout. `apply.sh`
+refuses it on a machine whose root file system is not that layout's
+partition (an install that did not finish, then NixOS installed by hand),
+since switching to it would leave the machine unable to start; it says
+which files to remove so the next run starts from `/etc/nixos`.
 
 `apply.sh` builds on the machine (`nix build`) and switches with
 `switch-to-configuration`, the same as `nixos-rebuild switch`. If a switch
@@ -68,9 +91,13 @@ partition and an ext4 root, booting with GRUB on both BIOS and EFI),
 install, and restart. What carries over:
 
 - the SSH host key, so `known_hosts` keeps working;
-- the address: the installer keeps the addresses the machine had, and the
-  new system asks DHCP again (a router that hands out addresses by MAC
-  gives it the same one);
+- the address: the installer keeps the addresses the machine had. If the
+  address this computer reaches it at was set on the machine rather than
+  given by DHCP, the script writes it, the gateway and the name servers
+  into `network.nix` for that network card (matched by its hardware
+  address), so the new system comes up at the same address. A DHCP address
+  comes from DHCP again (a router that hands out addresses by MAC gives it
+  the same one);
 - the account's password (its hash, in a root-only file the new system
   reads when it makes the account) and the user's key.
 
