@@ -1,6 +1,6 @@
 # Tailscale (optional)
 
-Offer Tailscale; never require it. It lets the user reach the Mac from
+Offer Tailscale; never require it. It lets the user reach the machine from
 anywhere without opening ports.
 
 - It runs as the open-source `tailscaled` daemon, started by the Mac's
@@ -26,6 +26,14 @@ joins one of two ways:
    `new-config.sh`). The script joins at once.
 
 The Mac joins with its host name. `verify.sh` then checks it is connected.
+
+## On Linux
+
+The same settings and the same two ways to join, with
+`scripts/linux/tailscale.sh`. On NixOS the module runs `tailscaled`; on
+Debian, Ubuntu and Fedora `apply.sh` installs Tailscale from Tailscale's own
+signed package repository and starts it. An existing Tailscale install is
+kept as it is.
 
 ## Another control server
 

@@ -9,8 +9,12 @@ Bitwarden, any command, or, as a last resort, a private env file).
 
 This version covers **Apple silicon Macs**, configured with
 [Determinate Nix](https://determinate.systems) and
-[nix-darwin](https://github.com/nix-darwin/nix-darwin). Linux and Windows
-are planned.
+[nix-darwin](https://github.com/nix-darwin/nix-darwin), and **Linux
+machines**: NixOS with this repository's NixOS module; any other
+distribution replaced with NixOS by
+[nixos-anywhere](https://github.com/nix-community/nixos-anywhere) if you
+choose; or, if you keep Debian, Ubuntu or Fedora, a distro-neutral script.
+Windows is planned.
 
 ## Install the skill
 
@@ -18,8 +22,9 @@ are planned.
 npx skills add kunchenguid/headless -g
 ```
 
-Then ask your agent to set up your Mac, for example "set up my Mac mini at
-192.168.1.20 as a headless machine". The skill walks you through:
+Then ask your agent to set up your machine, for example "set up my Mac mini
+at 192.168.1.20 as a headless machine". For a Mac the skill walks you
+through:
 
 1. Admin access and Remote Login at the Mac (you, once).
 2. Saving the admin password in your secret store (you, once).
@@ -29,10 +34,15 @@ Then ask your agent to set up your Mac, for example "set up my Mac mini at
 6. Applying the config, and Tailscale if you want it.
 7. Reading every setting back, restarting, and checking the Mac comes back.
 
+A Linux machine takes the same path, without the admin session: after the
+first sign-in, a machine on NixOS is applied as it is; on another
+distribution you choose between installing NixOS (the whole disk is erased)
+and keeping it with the script.
+
 ## The repository
 
 - `skills/headless/`: the skill (`SKILL.md`, `references/`, `scripts/`, and
-  `assets/darwin`, the default config it copies).
+  `assets/darwin` and `assets/nixos`, the default configs it copies).
 - `modules/darwin/headless.nix`: the nix-darwin module, exported as
   `darwinModules.headless`. Use it from your own flake:
 
@@ -44,20 +54,27 @@ Then ask your agent to set up your Mac, for example "set up my Mac mini at
   ```
 
   Its options are listed in `skills/headless/references/mac.md`.
-- `templates.darwin` (default): `nix flake init -t github:kunchenguid/headless`
-  gives the same starting config the skill copies.
-- `tests/`: the secret helper's test and the Mac journey CI runs.
+- `modules/nixos/headless.nix`: the NixOS module, exported as
+  `nixosModules.headless`, used the same way in a `nixosSystem`. Its
+  options are listed in `skills/headless/references/linux.md`.
+- `templates.darwin` (default) and `templates.nixos`:
+  `nix flake init -t github:kunchenguid/headless#nixos` gives the starting
+  config the skill copies (with a disko disk layout for new installs).
+- `tests/`: the secret helper's test and the Mac and Linux journeys CI runs.
 
 ## Checks
 
 ```sh
-nix flake check                 # module and default config build (aarch64-darwin)
+nix flake check                 # modules and default configs build (this system's)
 tests/secret-run.test.sh        # the password is piped, never printed
-shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/mac/*.sh skills/headless/scripts/mac/remote/*.sh
+shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/*/*.sh skills/headless/scripts/*/remote/*.sh
 ```
 
 The `mac` workflow runs the whole journey on a GitHub-hosted Mac, over SSH
-to itself, and checks its log never holds the password.
+to itself. The `linux` workflow runs the distro-neutral script on a
+GitHub-hosted Ubuntu runner over SSH to itself, and installs NixOS with
+nixos-anywhere on an x86_64 Ubuntu virtual machine there, then applies,
+restarts and verifies it. Each checks its log never holds the password.
 
 ## License
 

@@ -1,0 +1,146 @@
+name: linux
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Lint the scripts
+        run: |
+          sudo apt-get install -y -q shellcheck > /dev/null
+          shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/*/*.sh skills/headless/scripts/*/remote/*.sh
+      - name: Secret helper
+        run: tests/secret-run.test.sh
+      - name: The NixOS module and template build (x86_64-linux)
+        run: nix flake check -L
+
+  script:
+    # The distro-neutral script's journey against this Ubuntu runner over SSH,
+    # with the env-file store: new config, first sign-in, apply, verify, and a
+    # second apply that changes nothing.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make an account with a password, sudo and SSH password sign-in
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/secrets"
+          pw="$(openssl rand -base64 18 | tr -d '/+=')x9"
+          printf 'HEADLESS_PASSWORD=%s\n' "$pw" > "$RUNNER_TEMP/secrets/linux.env"
+          printf '%s\n' "$pw" > "$RUNNER_TEMP/secrets/pw"
+          sudo useradd -m -s /bin/bash -G sudo headless
+          # The password goes in from a file, never this log.
+          sed 's/^/headless:/' "$RUNNER_TEMP/secrets/pw" | sudo chpasswd
+          if sudo -u headless sudo -n true 2> /dev/null; then
+            echo "the test account can use sudo without a password"; exit 1
+          fi
+          sudo apt-get install -y -q openssh-server > /dev/null
+          # A machine a person set up lets the account sign in with its password.
+          printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' | sudo tee /etc/ssh/sshd_config.d/01-test.conf > /dev/null
+          sudo systemctl restart ssh
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/headless_test
+      - name: Journey
+        run: |
+          SSH_KEY=~/.ssh/headless_test tests/linux-journey.sh 127.0.0.1 headless \
+            "$RUNNER_TEMP/secrets/linux.env" "$RUNNER_TEMP/linux-config"
+      - name: The password is in no log
+        if: always()
+        run: |
+          pw="$(cat "$RUNNER_TEMP/secrets/pw")"
+          if grep -rqF -- "$pw" "$RUNNER_TEMP/linux-config.journey.log" "$RUNNER_TEMP/linux-config"; then
+            echo "the password is in the journey's log or config folder"; exit 1
+          fi
+          if sudo journalctl --no-pager -o cat | grep -qF -- "$pw"; then
+            echo "the password is in the system journal"; exit 1
+          fi
+          echo "the password is in neither the journey's log, its config folder, nor the system journal"
+
+  install:
+    # nixos-anywhere replaces an x86_64 Ubuntu virtual machine's system with
+    # NixOS (UEFI firmware, whole disk), then the journey applies, restarts
+    # and verifies it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Start an Ubuntu virtual machine with a password account
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules > /dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q > /dev/null
+          sudo apt-get install -y -q qemu-system-x86 qemu-utils ovmf cloud-image-utils > /dev/null
+          cd "$RUNNER_TEMP"
+          base=https://cloud-images.ubuntu.com/releases/noble/release
+          curl -fsSLO "$base/ubuntu-24.04-server-cloudimg-amd64.img"
+          curl -fsSL "$base/SHA256SUMS" | grep ' \*ubuntu-24.04-server-cloudimg-amd64.img$' | sha256sum -c -
+          qemu-img convert -O qcow2 ubuntu-24.04-server-cloudimg-amd64.img disk.qcow2
+          qemu-img resize disk.qcow2 20G
+          umask 077
+          mkdir -p secrets
+          pw="$(openssl rand -base64 18 | tr -d '/+=')x9"
+          printf 'HEADLESS_PASSWORD=%s\n' "$pw" > secrets/vm.env
+          printf '%s\n' "$pw" > secrets/pw
+          # The account a person would have made: a password, sudo that asks
+          # for it, SSH password sign-in on, no keys.
+          {
+            echo '#cloud-config'
+            echo 'ssh_pwauth: true'
+            echo 'users:'
+            echo '  - name: headless'
+            echo '    groups: [sudo]'
+            echo '    shell: /bin/bash'
+            echo '    lock_passwd: false'
+            echo 'chpasswd:'
+            echo '  expire: false'
+            echo '  users:'
+            echo '    - name: headless'
+            echo "      password: \"$pw\""
+            echo '      type: text'
+          } > user-data
+          cloud-localds seed.img user-data
+          cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+          # The machine answers on its own address, 127.0.0.2, port 22.
+          sudo systemctl stop ssh.socket ssh.service 2> /dev/null || true
+          sudo sysctl -q net.ipv4.ip_unprivileged_port_start=22
+          nohup qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4096 -nographic \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -drive if=virtio,file=disk.qcow2 -drive if=virtio,format=raw,file=seed.img \
+            -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.2:22-:22 > vm.log 2>&1 &
+          for _ in $(seq 120); do
+            ssh-keyscan -T 3 127.0.0.2 2> /dev/null | grep -q ed25519 && break
+            sleep 5
+          done
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/headless_test
+          # cloud-init may still be finishing the account.
+          sleep 30
+      - name: Journey
+        run: |
+          SSH_KEY=~/.ssh/headless_test tests/linux-journey.sh 127.0.0.2 headless \
+            "$RUNNER_TEMP/secrets/vm.env" "$RUNNER_TEMP/vm-config" --install /dev/vda --restart -- --host-name headless-ci
+      - name: The password is in no log
+        if: always()
+        run: |
+          pw="$(cat "$RUNNER_TEMP/secrets/pw")"
+          if grep -rqF -- "$pw" "$RUNNER_TEMP/vm-config.journey.log" "$RUNNER_TEMP/vm-config"; then
+            echo "the password is in the journey's log or config folder"; exit 1
+          fi
+          echo "the password is in neither the journey's log nor its config folder"
+      - name: The virtual machine's console
+        if: failure()
+        run: tail -n 100 "$RUNNER_TEMP/vm.log"

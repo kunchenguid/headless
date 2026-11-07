@@ -1,5 +1,6 @@
 # shellcheck shell=bash disable=SC2034
-# lib.sh - shared by the Mac step scripts beside it; sourced, not run.
+# lib.sh - shared by the Mac step scripts beside it, and by the Linux ones
+# (linux/lib.sh sources it); sourced, not run.
 #
 # Every step takes the machine's config folder (made by new-config.sh). Its
 # headless.env names how to reach the machine and where the password lives;
@@ -59,6 +60,49 @@ on() { ssh "${SSH_OPTS[@]}" "$LOGIN@$ADDRESS" "$@"; }
 key_works() { [ -s "$KNOWN_HOSTS" ] && on true > /dev/null 2>&1; }
 need_key() {
   key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; run connect.sh first"
+}
+
+# first_sign_in HINT: pin the machine's ed25519 host key in the config
+# folder on first use (and refuse a changed one), then, unless key sign-in
+# already works, sign in once with the password from the store and add
+# your public key. HINT says what to check when the machine gives no key.
+# Run it before with_secrets: it wires the password itself when needed.
+first_sign_in() {
+  local scanned
+  scanned="$(ssh-keyscan -T 10 -t ed25519 "$ADDRESS" 2> /dev/null | grep -v '^#' || true)"
+  [ "$(printf '%s\n' "$scanned" | grep -c .)" -eq 1 ] || die "$ADDRESS gave no single ed25519 host key; $1"
+  if [ -s "$KNOWN_HOSTS" ]; then
+    [ "$(cut -d' ' -f2- < "$KNOWN_HOSTS")" = "$(printf '%s\n' "$scanned" | cut -d' ' -f2-)" ] \
+      || die "$ADDRESS now shows a different host key than the one pinned in $KNOWN_HOSTS; stop and find out why"
+  else
+    printf '%s\n' "$scanned" > "$KNOWN_HOSTS"
+    say "pinned host key $(ssh-keygen -lf "$KNOWN_HOSTS" | awk '{ print $2 }') (compare it at the machine with: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)"
+  fi
+
+  if key_works; then
+    say "key sign-in already works for $LOGIN@$ADDRESS"
+    return 0
+  fi
+  with_secrets "${FIRST_SIGN_IN_ARGS[@]}"
+  read_password
+  # SSH asks this helper for the password; it prints it from its own
+  # environment, never from a command line or a file.
+  local tmp pub
+  tmp="$(mktemp -d)"
+  # shellcheck disable=SC2064 # tmp is fixed now
+  trap "rm -rf '$tmp'" EXIT
+  printf '#!/bin/sh\nprintf "%%s\\n" "$HEADLESS_ASKPASS_SECRET"\n' > "$tmp/askpass"
+  chmod 0700 "$tmp/askpass"
+  pub="$(head -n 1 "$SSH_KEY.pub")"
+  printf '%s\n' "$pub" | HEADLESS_ASKPASS_SECRET="$PASSWORD" SSH_ASKPASS="$tmp/askpass" SSH_ASKPASS_REQUIRE=force \
+    ssh -o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no \
+      -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 \
+      -o ConnectTimeout=15 -o LogLevel=ERROR "$LOGIN@$ADDRESS" \
+      'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; IFS= read -r k; grep -qxF "$k" ~/.ssh/authorized_keys || printf "%s\n" "$k" >> ~/.ssh/authorized_keys' \
+    || die "password sign-in to $LOGIN@$ADDRESS failed; check the password in $PASSWORD_REF and that SSH allows $LOGIN to sign in with a password"
+  unset PASSWORD
+  key_works || die "your key was added but key sign-in still fails"
+  say "added your key to $LOGIN@$ADDRESS; key sign-in works"
 }
 
 # copy_remote: put the remote step scripts in ~/.headless/remote.

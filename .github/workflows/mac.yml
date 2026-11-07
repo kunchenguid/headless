@@ -16,7 +16,7 @@ jobs:
       - name: Lint the scripts
         run: |
           brew install shellcheck
-          shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/mac/*.sh skills/headless/scripts/mac/remote/*.sh
+          shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/*/*.sh skills/headless/scripts/*/remote/*.sh
       - name: Secret helper
         run: tests/secret-run.test.sh
       - name: Skill is valid and found

@@ -1,8 +1,8 @@
 ---
 name: headless
-description: Set up a headless Mac (Apple silicon) over SSH, step by step, from "an admin account with a password and Remote Login on" to a configured machine with Determinate Nix, a nix-darwin config, key-only SSH, automatic sign-in, never-sleep power settings and optional Tailscale, then restart it and confirm it comes back. Use when the user wants to set up, configure, update or check a headless Mac mini or other Mac they reach only over SSH. The admin password stays in the user's secret store (Automic Vault, 1Password, Bitwarden, any command, or a private env file); you only ever name the store entry.
+description: Set up a headless Mac (Apple silicon) or Linux machine over SSH, step by step, from "an admin account with a password and SSH on" to a configured machine with key-only SSH, automatic sign-in, never-sleep settings and optional Tailscale - on a Mac with Determinate Nix and nix-darwin, on Linux with a NixOS module (installing NixOS with nixos-anywhere if the user wants) or a distro-neutral script for Debian, Ubuntu and Fedora - then restart it and confirm it comes back. Use when the user wants to set up, configure, update or check a headless Mac mini, Linux server or other machine they reach only over SSH. The admin password stays in the user's secret store (Automic Vault, 1Password, Bitwarden, any command, or a private env file); you only ever name the store entry.
 license: MIT
-compatibility: Runs on macOS or Linux with bash, ssh and tar. The machine being set up must be an Apple silicon Mac on a current macOS (tested on macOS 26).
+compatibility: Runs on macOS or Linux with bash, ssh and tar (and Nix, only to install NixOS on a Linux machine). The machine being set up is an Apple silicon Mac on a current macOS (tested on macOS 26), or an x86_64 or aarch64 Linux machine with systemd running NixOS, Debian, Ubuntu or Fedora.
 ---
 
 # headless
@@ -11,8 +11,9 @@ Guide the user through setting up one headless machine over SSH. Go one
 step at a time: say what the step does, run it, show its result, and only
 then move on. Every step is safe to run again.
 
-This version covers **Macs**. For a Linux or Windows machine, say that the
-skill does not cover it yet and stop.
+This version covers **Macs** (steps 1 to 7) and **Linux machines** ("Linux
+machines" below; steps 2 and the rules are shared). For a Windows machine,
+say that the skill does not cover it yet and stop.
 
 All scripts live in this skill's `scripts/` folder; call them by path.
 `$SKILL` below means this skill's folder.
@@ -201,3 +202,75 @@ copy; the scripts only need `headless.env` and that output name. See
   Mac was reinstalled before removing the folder's `known_hosts`.
 - Never work around a failed step by turning on password sign-in, adding a
   sudo rule, or printing the secret.
+
+## Linux machines
+
+The same rules hold. The scripts are in `scripts/linux/`; details, options
+and failure cases are in `references/linux.md`.
+
+**L1. Admin access (the user does this).** Ask the user to confirm the
+machine runs an **SSH server** they can reach, has an **account with a
+password** that may use `sudo` (in the `sudo` or `wheel` group), and its
+**address**. Root is not used as the login.
+
+**L2. The password store and key:** step 2 above, unchanged.
+
+**L3. The config folder.** Same questions as step 3, with Linux's extras:
+`neverSleep` and `autoUpdates`, each **on**. Automatic sign-in on Linux
+means the account's own session (its user services) starts at boot without
+anyone signing in; nothing signs in on a screen.
+
+```sh
+$SKILL/scripts/linux/new-config.sh ~/headless/box \
+  --address ADDRESS --login ACCOUNT --password-ref ENTRY \
+  [--ssh-key ~/.ssh/id_ed25519] [--host-name NAME] [--no-auto-login] \
+  [--tailscale] [--tailscale-key-ref ENTRY] [--extra-off NAME]...
+```
+
+**L4. First sign-in.** `$SKILL/scripts/linux/connect.sh ~/headless/box`,
+as in step 4. Its last lines say which distribution the machine runs and
+what comes next.
+
+**L5. NixOS, or not.**
+
+- **It runs NixOS:** go to L6. The first `apply.sh` copies the machine's own
+  `/etc/nixos` into the folder (`nixos/`), so its boot loader, disks and
+  other settings stay; ask the user to check it holds nothing private before
+  they push the folder anywhere.
+- **Any other distribution:** offer to **replace it with NixOS**, using
+  nixos-anywhere. Say plainly: this **erases the whole disk**, everything on
+  it is gone, and it needs Nix on this computer, an x86_64 or aarch64
+  machine with 2 GB of memory and Secure Boot off. The machine keeps its
+  address, SSH host key and the account's password. If the user agrees:
+
+  ```sh
+  $SKILL/scripts/linux/install-nixos.sh ~/headless/box --list-disks
+  $SKILL/scripts/linux/install-nixos.sh ~/headless/box --disk /dev/DISK --yes-wipe
+  ```
+
+  Show the disk list and have the user name the disk; pass `--yes-wipe`
+  only after they agreed to erase that disk. It takes 5 to 20 minutes.
+- **The user keeps their distribution** (Debian, Ubuntu or Fedora): go to
+  L6; `apply.sh` runs the distro-neutral script instead.
+
+**L6. Apply, then verify, restart, verify.**
+
+```sh
+$SKILL/scripts/linux/apply.sh ~/headless/box
+$SKILL/scripts/linux/verify.sh ~/headless/box
+$SKILL/scripts/linux/restart.sh ~/headless/box
+$SKILL/scripts/linux/verify.sh ~/headless/box
+```
+
+On NixOS `apply.sh` builds the system on the machine and switches to it; on
+another distribution it runs the script, which prints one `changed:` line
+per change and none when run again. Commit the folder afterwards. For
+Tailscale, run `$SKILL/scripts/linux/tailscale.sh ~/headless/box` as in
+step 6. `restart.sh` restarts the machine, waits for a new boot, and with
+automatic sign-in on checks the session started before anyone signed in.
+Tell the user before restarting.
+
+Updates: edit `settings.json` (or `machine.nix` on NixOS) and run `apply.sh`
+and `verify.sh` again. Other distributions install updates by themselves
+(`autoUpdates`). On NixOS, delete `flake.lock` and run `apply.sh` to move
+to newer inputs.
