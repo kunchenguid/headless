@@ -54,6 +54,12 @@ Some Macs, virtual Macs among them, have no start-up-after-power-loss or
 wake-for-network setting. The module skips those with a warning, and
 `verify.sh` reports them as `n/a`.
 
+After a restart with automatic sign-in, macOS may show a dialog asking for
+a password to unlock the disk "Nix Store", even though Determinate Nix has
+already mounted `/nix` and Nix works. This is how macOS and Determinate
+Nix behave together, not a failure; nothing waits on the dialog, and
+Cancel closes it.
+
 Add anything else (packages, more defaults, launchd services) to
 `machine.nix` as ordinary nix-darwin options.
 
