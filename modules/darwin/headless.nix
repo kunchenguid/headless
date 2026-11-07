@@ -167,16 +167,13 @@ in
         headless_has powernap && /usr/bin/pmset -a powernap 0
       ''
       ++ lib.optional ext.startAfterPowerLoss ''
-        # Start up after a power cut (autorestart). Where the Mac also has
-        # autorestartatconnect, turn it on too, so it starts whenever power
-        # comes back, after a clean shutdown as well.
+        # Start up after a power cut (autorestart).
         echo >&2 "headless: turning start-up after power loss on..."
         if headless_has autorestart; then
           /usr/bin/pmset -a autorestart 1
         else
           echo >&2 "headless: warning: this Mac has no start-up after power loss setting"
         fi
-        headless_has autorestartatconnect && /usr/bin/pmset -a autorestartatconnect 1
       ''
       ++ lib.optional ext.wakeOnLan ''
         echo >&2 "headless: turning wake for network access on..."

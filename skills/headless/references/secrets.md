@@ -7,7 +7,9 @@ The agent never sees it. It names a store entry; `scripts/secret-run.sh`
 reads the entry and hands the password to the step on a pipe (file
 descriptor 3), and the step passes it to `sudo -S` or SSH's password prompt.
 It never appears on a command line, in an environment variable of the agent,
-in a file the scripts write, or in their output.
+or in the scripts' output. The scripts write it to one file only: with
+automatic sign-in on, the Mac's `/etc/kcpassword`, which macOS needs at
+start-up and which keeps it in recoverable form (see "On the Mac" below).
 
 The entry name goes in the config folder's `headless.env` as `PASSWORD_REF`.
 
