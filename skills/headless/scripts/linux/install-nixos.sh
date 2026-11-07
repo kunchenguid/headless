@@ -170,7 +170,7 @@ say "the installer is up; installing NixOS on $DISK"
   --generate-hardware-config nixos-generate-config "$CONFIG/hardware-configuration.nix" \
   --extra-files "$tmp/extra" --flake "$(flake_ref "$CONFIG")#machine" \
   -i "$SSH_KEY" --target-host "root@$ADDRESS" \
-  || die "nixos-anywhere failed (above). Restart the machine, from here with: ssh root@$ADDRESS reboot (the installer lets your key sign in as root). If the install had not yet erased the disk, its old system comes back and install-nixos.sh can run again; otherwise it needs NixOS installed from a USB stick"
+  || die "nixos-anywhere failed (above). Restart the machine, from here with: ssh -o \"UserKnownHostsFile=\\\"$KNOWN_HOSTS\\\"\" -i \"$SSH_KEY\" root@$ADDRESS reboot (the installer has the same host key and lets your key sign in as root). If the install had not yet erased the disk, its old system comes back and install-nixos.sh can run again; otherwise it needs NixOS installed from a USB stick"
 if command -v git > /dev/null && [ -d "$CONFIG/.git" ]; then git -C "$CONFIG" add -A; fi
 
 start=$SECONDS

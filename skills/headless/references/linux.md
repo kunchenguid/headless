@@ -129,8 +129,10 @@ starts nixos-anywhere.
 The script locks the config's inputs on this computer before the installer
 starts, so a missing input or a network failure stops it with the machine
 untouched. If nixos-anywhere fails before the disk was erased, restarting
-the machine (`ssh root@ADDRESS reboot`, which the installer lets your key
-do) brings its old system back and the script can run again. If it fails
+the machine (the script prints the command: `ssh -o
+UserKnownHostsFile=FOLDER/known_hosts -i KEY root@ADDRESS reboot`, with the
+folder's pinned host key and your key, which the installer lets sign in as
+root) brings its old system back and the script can run again. If it fails
 after, the disk holds a half-installed system: install NixOS from a USB
 stick.
 
