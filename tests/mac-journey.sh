@@ -18,6 +18,7 @@ shift 4
 RESTART=0
 [ "${1-}" != --restart ] || { RESTART=1; shift; }
 [ "${1-}" != -- ] || shift
+mkdir -p "$(dirname "$DIR")"
 log="$DIR.journey.log"
 : > "$log"
 step() { echo "== $*" | tee -a "$log"; "$@" 2>&1 | tee -a "$log"; return "${PIPESTATUS[0]}"; }
