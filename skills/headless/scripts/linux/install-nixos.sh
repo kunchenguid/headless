@@ -80,8 +80,8 @@ read_password
 
 # The address this computer reaches the machine at. One the machine set
 # itself (not from DHCP) goes into network.nix, so the new system keeps it;
-# a DHCP address comes back from DHCP. Anything else (IPv6, or an address
-# on a bridge, bond or VLAN rather than the network card itself) stops here,
+# a DHCP address comes back from DHCP. Anything else (IPv6, Wi-Fi, or an
+# address on a bridge, bond or VLAN rather than the network card) stops here,
 # before the disk is touched: the new system might not come back at it.
 # shellcheck disable=SC2016 # runs on the machine
 net="$(on 'set -- $SSH_CONNECTION; a="$3"
@@ -89,6 +89,7 @@ net="$(on 'set -- $SSH_CONNECTION; a="$3"
   [ -n "$line" ] || { echo unknown; exit 0; }
   dev="$(printf "%s\n" "$line" | awk "{ print \$2 }")"
   [ -e "/sys/class/net/$dev/device" ] || { echo "virtual $dev"; exit 0; }
+  [ ! -e "/sys/class/net/$dev/wireless" ] || { echo "wireless $dev"; exit 0; }
   case "$line" in *" dynamic"*) echo dhcp; exit 0 ;; esac
   echo "static $(printf "%s\n" "$line" | awk "{ print \$4 }") $(cat "/sys/class/net/$dev/address")"
   ip -4 route show default dev "$dev" | awk "/^default via/ { print \"gateway \" \$3; exit }"
@@ -122,6 +123,7 @@ NIX
     "${NIXF[@]}" eval --json --file "$CONFIG/network.nix" > /dev/null || die "could not write $CONFIG/network.nix"
     say "$ADDRESS has a fixed address ($cidr${gw:+, gateway $gw}); the new system keeps it (network.nix)" ;;
   dhcp) say "$ADDRESS's address comes from DHCP; the new system asks DHCP again" ;;
+  wireless\ *) die "$ADDRESS is on ${net#wireless }, a Wi-Fi card; the installer has no Wi-Fi settings, so the machine would not come back. Nothing was changed. Connect it by cable and reach it at that address, or install NixOS by hand" ;;
   virtual\ *) die "$ADDRESS is on ${net#virtual }, a bridge, bond, VLAN or other virtual network device, which install-nixos.sh does not carry over; nothing was changed. Reach the machine at an IPv4 address on its network card, or install NixOS by hand" ;;
   *) die "could not tell where $ADDRESS's address comes from (install-nixos.sh carries over an IPv4 address on the machine's network card); nothing was changed. Reach the machine at such an address, or install NixOS by hand" ;;
 esac

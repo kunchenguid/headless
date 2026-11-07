@@ -71,10 +71,12 @@ config turns it on, build the skill's setup instead of the older
 `/etc/nixos#machine`; the flake also answers to the host name). The
 automatic update first moves the flake's `nixpkgs` input to the newest
 revision of its branch, so the machine keeps taking security fixes on its
-own release. When the machine's `flake.lock` holds a newer nixpkgs of the
-same branch than the folder's, `apply.sh` keeps the newer one (it never
-takes the machine back) and writes it into the folder's `flake.lock` to
-commit. `/etc/nixos` gets the folder as soon as the new system is the boot
+own release; a channel the machine's own config names for
+`system.autoUpgrade` is set aside (NixOS allows only one of the two). When
+the machine's `flake.lock` holds a newer nixpkgs of the same branch than
+the folder's and the machine's boot default was built from it, `apply.sh`
+keeps the newer one (it never takes the machine back) and writes it into
+the folder's `flake.lock` to commit. `/etc/nixos` gets the folder as soon as the new system is the boot
 default, even if the switch then reports errors. Other edits made in
 `/etc/nixos` are replaced at the next apply; make them in the config
 folder. If `/etc/nixos` is
@@ -109,8 +111,9 @@ install, and restart. What carries over:
   into `network.nix` for that network card (matched by its hardware
   address), so the new system comes up at the same address. A DHCP address
   comes from DHCP again (a router that hands out addresses by MAC gives it
-  the same one). Any other address, IPv6 or one on a bridge, bond or
-  VLAN, stops the script before the disk is touched;
+  the same one). Any other address, IPv6, Wi-Fi (the installer has no
+  Wi-Fi settings) or one on a bridge, bond or VLAN, stops the script before
+  the disk is touched;
 - the account's password (its hash, in a root-only file the new system
   reads when it makes the account) and the user's key.
 

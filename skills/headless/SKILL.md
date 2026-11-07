@@ -260,7 +260,9 @@ what comes next.
   it is gone, and it needs Nix on this computer, an x86_64 or aarch64
   machine with 2 GB of memory and Secure Boot off. The machine keeps its
   address (a fixed one is written into the new setup), SSH host key and the
-  account's password. If the user agrees:
+  account's password; it needs the machine reached at an IPv4 address on
+  its wired network card, and stops, changing nothing, otherwise. If the
+  user agrees:
 
   ```sh
   $SKILL/scripts/linux/install-nixos.sh ~/headless/box --list-disks

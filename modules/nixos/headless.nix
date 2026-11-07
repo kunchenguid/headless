@@ -100,6 +100,9 @@ in
     # machine's own updates (system.autoUpgrade, or nixos-rebuild switch at
     # the machine) build the same system instead of an older configuration.
     system.autoUpgrade.flake = lib.mkDefault "/etc/nixos#machine";
+    # NixOS refuses a channel beside a flake; while the update builds
+    # /etc/nixos, a channel the machine's own config names is not used.
+    system.autoUpgrade.channel = lib.mkIf (config.system.autoUpgrade.flake == "/etc/nixos#machine") (headlessWins null);
     # With a flake, nixos-rebuild's --upgrade does nothing: the update first
     # moves the flake's nixpkgs input to the newest revision of its branch,
     # so the machine keeps taking security fixes on its own release.
