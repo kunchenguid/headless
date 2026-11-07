@@ -45,6 +45,15 @@ jobs:
           # The account's password goes in from a file, never this log.
           sudo sysadminctl -addUser headless -fullName Headless -admin -password "$(cat "$RUNNER_TEMP/secrets/pw")" 2>&1 | grep -v -F "$pw" || true
           sudo dscl . -read /Users/headless UniqueID
+          # The runner image lets admins sudo without a password; a new Mac
+          # does not. sudo takes the last matching rule, and this file is read
+          # after the image's own rules.
+          echo 'headless ALL=(ALL) ALL' | sudo tee /etc/sudoers.d/zz-headless-test > /dev/null
+          sudo chmod 0440 /etc/sudoers.d/zz-headless-test
+          sudo visudo -c
+          if sudo -u headless sudo -n true 2> /dev/null; then
+            echo "the test account can still use sudo without a password"; exit 1
+          fi
           sudo systemsetup -setremotelogin on 2>&1 || sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist
           ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/headless_test
       - name: Journey
