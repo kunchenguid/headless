@@ -174,10 +174,7 @@ $SKILL/scripts/mac/verify.sh ~/headless/mini
 for a power setting this Mac does not have) and checks that password sign-in
 is refused. `restart.sh` restarts the Mac, waits until it answers again with
 a new boot time, and, with automatic sign-in on, until the account is signed
-in on the screen. Tell the user before restarting, and when verify showed
-Tailscale in use by another account that did not choose Run unattended,
-say that this restart signs it out and `tailscale.sh` then joins it as the
-skill's account.
+in on the screen. Tell the user before restarting.
 
 Finish with a short summary: what is on, what is off, where the config
 folder is, and how to update (below).
@@ -394,10 +391,10 @@ $SKILL/scripts/windows/verify.sh ~/headless/pc
 
 A new host name takes effect at this restart. `restart.sh` waits for a new
 boot and, with automatic sign-in on, for the account to be signed in on
-the screen. Tell the user before restarting, and when verify showed
-Tailscale in use by another account that did not choose Run unattended,
-say that this restart signs it out and `tailscale.sh` then joins it as the
-skill's account.
+the screen. Tell the user before restarting, and when verify's Tailscale
+line says "otherwise it signs out at the next restart", say that this
+restart signs it out unless that account chose Run unattended, and that
+`tailscale.sh` then joins it as the skill's account.
 
 Updates: edit `settings.json` or `machine.ps1` and run `apply.sh` and
 `verify.sh` again. Windows installs its own updates; `updatesOvernight`
