@@ -1,8 +1,8 @@
 ---
 name: headless
-description: Set up a headless Mac (Apple silicon) or Linux machine over SSH, step by step, from "an admin account with a password and SSH on" to a configured machine with key-only SSH, automatic sign-in, never-sleep settings and optional Tailscale - on a Mac with Determinate Nix and nix-darwin, on Linux with a NixOS module (installing NixOS with nixos-anywhere if the user wants) or a distro-neutral script for Debian, Ubuntu and Fedora - then restart it and confirm it comes back. Use when the user wants to set up, configure, update or check a headless Mac mini, Linux server or other machine they reach only over SSH. The admin password stays in the user's secret store (Automic Vault, 1Password, Bitwarden, any command, or a private env file); you only ever name the store entry.
+description: Set up a headless Mac (Apple silicon), Linux or Windows machine over SSH, step by step, from "an admin account with a password and SSH on" to a configured machine with key-only SSH, automatic sign-in, never-sleep settings and optional Tailscale - on a Mac with Determinate Nix and nix-darwin, on Linux with a NixOS module (installing NixOS with nixos-anywhere if the user wants) or a distro-neutral script for Debian, Ubuntu and Fedora, on Windows 11 or Windows Server with a rerunnable PowerShell configuration - then restart it and confirm it comes back. Use when the user wants to set up, configure, update or check a headless Mac mini, Linux server, Windows PC or other machine they reach only over SSH. The admin password stays in the user's secret store (Automic Vault, 1Password, Bitwarden, any command, or a private env file); you only ever name the store entry.
 license: MIT
-compatibility: Runs on macOS or Linux with bash, ssh and tar (and Nix, only to install NixOS on a Linux machine). The machine being set up is an Apple silicon Mac on a current macOS (tested on macOS 26), or an x86_64 or aarch64 Linux machine with systemd running NixOS, Debian, Ubuntu or Fedora.
+compatibility: Runs on macOS or Linux with bash, ssh and tar (and Nix, only to install NixOS on a Linux machine). The machine being set up is an Apple silicon Mac on a current macOS (tested on macOS 26), or an x86_64 or aarch64 Linux machine with systemd running NixOS, Debian, Ubuntu or Fedora, or a Windows 11 (Home or Pro) or Windows Server 2025 machine, x86_64 or Arm64 (tested on 26H2 and Server 2025).
 ---
 
 # headless
@@ -11,9 +11,9 @@ Guide the user through setting up one headless machine over SSH. Go one
 step at a time: say what the step does, run it, show its result, and only
 then move on. Every step is safe to run again.
 
-This version covers **Macs** (steps 1 to 7) and **Linux machines** ("Linux
-machines" below; steps 2 and the rules are shared). For a Windows machine,
-say that the skill does not cover it yet and stop.
+This version covers **Macs** (steps 1 to 7), **Linux machines** ("Linux
+machines" below) and **Windows machines** ("Windows machines" below); step 2
+and the rules are shared.
 
 All scripts live in this skill's `scripts/` folder; call them by path.
 `$SKILL` below means this skill's folder.
@@ -303,3 +303,100 @@ Updates: edit `settings.json` (or `machine.nix` on NixOS) and run `apply.sh`
 and `verify.sh` again. Other distributions install updates by themselves
 (`autoUpdates`). On NixOS, delete `flake.lock` and run `apply.sh` to move
 to newer inputs on the same release.
+
+## Windows machines
+
+The same rules hold; an SSH session of an administrator on Windows is
+already elevated, so there is no `sudo` and the password is only read for
+automatic sign-in. The scripts are in `scripts/windows/`; details, options
+and failure cases are in `references/windows.md`.
+
+**W1. Admin access and OpenSSH Server (the user does this).** Ask the user
+to confirm, at the PC, that it has a **local administrator account with a
+password** (not a Microsoft account: automatic sign-in and SSH need a local
+one), and its **address** (Settings > Network & internet > Properties).
+The account's name may use letters, digits, dots, dashes and underscores
+(at most 20; case does not matter). If its name has a space or any other
+character, the skill cannot use it: ask the user to make another local
+administrator account for it, such as `headless` (`references/windows.md`).
+Then ask them to open **Windows PowerShell as administrator** (right-click
+Start > Terminal (Admin)) and paste these lines, which install and start
+OpenSSH Server:
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
+```
+
+The first line takes a few minutes. OpenSSH's firewall rule
+lets SSH in only on a **Private** network, and Windows makes a new network
+Public. Ask whether this network is their home or office network (Settings
+> Network & internet shows "Public network" or "Private network"); if it
+is, and it says Public, have them also paste this line, which marks the
+networks the PC is on now as Private:
+
+```powershell
+Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private
+```
+
+`references/windows.md` says what to do if a line fails.
+
+**W2. The password store and key:** step 2 above, unchanged.
+
+**W3. The config folder.** Same questions as step 3, with Windows's extras,
+each **on**: `neverSleep`, `powerButtonShutsDown`, `hideSleep`,
+`updatesOvernight` (`references/windows.md` says what each does). A
+Windows host name is at most 15 characters. `--login` takes the account
+name as Windows shows it, in any case; a name with a space is refused, so
+use the other administrator account from W1.
+
+```sh
+$SKILL/scripts/windows/new-config.sh ~/headless/pc \
+  --address ADDRESS --login ACCOUNT --password-ref ENTRY \
+  [--ssh-key ~/.ssh/id_ed25519] [--host-name NAME] [--no-auto-login] \
+  [--tailscale] [--tailscale-key-ref ENTRY] [--extra-off NAME]...
+```
+
+It writes `settings.json`, `headless.env` and `machine.ps1` (the user's
+own PowerShell additions, run after the headless settings on every apply).
+
+**W4. First sign-in.** `$SKILL/scripts/windows/connect.sh ~/headless/pc`,
+as in step 4. The key goes in `C:\ProgramData\ssh\administrators_authorized_keys`
+(readable by Administrators and SYSTEM only). Its last lines say which
+Windows the machine runs.
+
+**W5. Apply.** `$SKILL/scripts/windows/apply.sh ~/headless/pc` copies the
+folder to `C:\ProgramData\headless` and applies it. It prints one
+`changed:` line per change and none when run again. With automatic sign-in
+on, it pipes the password from the store and Windows keeps it as an LSA
+secret, never as plain text in the registry; any administrator of the PC
+can still read it back (say so). Commit the folder afterwards. For
+Tailscale, run `$SKILL/scripts/windows/tailscale.sh ~/headless/pc` as in
+step 6; an existing Tailscale install is kept, and `apply.sh` sets its
+unattended policy so it runs before anyone signs in. One that another
+Windows account joined with Run unattended stays that account's; one it
+joined without it signs out at the next restart, and `tailscale.sh` then
+joins it as the skill's account. To have the skill own it sooner, ask,
+then `tailscale.sh ~/headless/pc --uninstall`, `apply.sh` and
+`tailscale.sh` (`references/windows.md`).
+
+**W6. Verify, restart, verify.**
+
+```sh
+$SKILL/scripts/windows/verify.sh ~/headless/pc
+$SKILL/scripts/windows/restart.sh ~/headless/pc
+$SKILL/scripts/windows/verify.sh ~/headless/pc
+```
+
+A new host name takes effect at this restart. `restart.sh` waits for a new
+boot and, with automatic sign-in on, for the account to be signed in on
+the screen. Tell the user before restarting, and when verify's Tailscale
+line says "otherwise it signs out at the next restart", say that this
+restart signs it out unless that account chose Run unattended, and that
+`tailscale.sh` then joins it as the skill's account.
+
+Updates: edit `settings.json` or `machine.ps1` and run `apply.sh` and
+`verify.sh` again. Windows installs its own updates; `updatesOvernight`
+keeps their restarts to the night. Turning an extra off later stops
+managing it and leaves the value it set.

@@ -35,6 +35,21 @@ Debian, Ubuntu and Fedora `apply.sh` installs Tailscale from Tailscale's own
 signed package repository and starts it. An existing Tailscale install is
 kept as it is.
 
+## On Windows
+
+The same settings and the same two ways to join, with
+`scripts/windows/tailscale.sh`. `apply.sh` installs Tailscale from its own
+installer (pinned version, checked SHA-256) in unattended mode, so it runs
+as a service and connects at start-up before anyone signs in. An existing
+Tailscale install is kept and not reinstalled; `apply.sh` sets the same
+unattended policy on it (`UnattendedMode` = `always` under
+`HKLM\SOFTWARE\Policies\Tailscale`), so it too runs before anyone signs in.
+Tailscale on Windows answers only the account that joined it. One that
+another account joined with Run unattended stays that account's; one it
+joined without it signs out at the next restart, and `tailscale.sh` then
+joins it as the skill's account. `references/windows.md` says how the
+skill's account can take it over sooner once the user agrees.
+
 ## Another control server
 
 To use a self-hosted control server such as Headscale, set

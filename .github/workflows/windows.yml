@@ -1,0 +1,84 @@
+name: windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  journey:
+    # The skill's Windows journey against this Windows Server runner over SSH
+    # to itself, with the env-file store: an admin account with a password,
+    # OpenSSH Server from step 1's lines, then new config, first sign-in,
+    # apply, verify, and a second apply that changes nothing. The scripts run
+    # in Ubuntu under WSL, the way the skill runs on a Windows computer.
+    # (The runner cannot restart; the VM runs prove restarts.)
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Keep the repository's line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Every PowerShell file parses in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $failed = 0
+          Get-ChildItem -Recurse -Filter *.ps1 skills | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            foreach ($e in $errors) { "$($_.FullName):$($e.Extent.StartLineNumber): $($e.Message)"; $failed++ }
+            "parsed $($_.Name)"
+          }
+          if ($failed) { exit 1 }
+      - name: Make a "new PC" admin account with a password and OpenSSH Server on
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:GITHUB_WORKSPACE '..\ci-secrets'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $pw = 'Hl-' + [guid]::NewGuid().ToString('N').Substring(0, 20) + '-9a'
+          # The password goes to a file, never to this log.
+          [IO.File]::WriteAllText((Join-Path $dir 'pw'), $pw)
+          New-LocalUser -Name headless -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -SID S-1-5-32-544 -Member headless
+          # Step 1's lines, as SKILL.md gives them.
+          Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+          Set-Service -Name sshd -StartupType Automatic
+          Start-Service sshd
+          Get-Service sshd
+      - uses: Vampire/setup-wsl@v7.2.0
+        with:
+          distribution: Ubuntu-24.04
+          wsl-version: 1
+          additional-packages: openssh-client python3
+      - name: Journey
+        shell: wsl-bash {0}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/secrets ~/.ssh
+          printf 'HEADLESS_PASSWORD=%s\n' "$(cat ../ci-secrets/pw)" > ~/secrets/win.env
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/headless_test
+          status=0
+          SSH_KEY=~/.ssh/headless_test tests/windows-journey.sh 127.0.0.1 headless ~/secrets/win.env ~/win-config \
+            -- --host-name headless-ci || status=$?
+          cp ~/win-config.journey.log ../ci-secrets/journey.log
+          tar -C ~ -cf ../ci-secrets/win-config.tar win-config
+          exit "$status"
+      - name: The password is in no log and nowhere it should not be
+        if: always()
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE '..\ci-secrets'
+          $pw = [IO.File]::ReadAllText((Join-Path $dir 'pw'))
+          $found = @()
+          foreach ($f in @((Join-Path $dir 'journey.log'), (Join-Path $dir 'win-config.tar')) + @(Get-ChildItem -Recurse -File "$env:ProgramData\headless", "$env:ProgramData\ssh" -ErrorAction SilentlyContinue | ForEach-Object FullName)) {
+            if ((Test-Path $f) -and ([IO.File]::ReadAllText($f)).Contains($pw)) { $found += $f }
+          }
+          $wl = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+          if ($null -ne $wl.DefaultPassword) { $found += 'the Winlogon DefaultPassword registry value' }
+          if ($found) { "the password is in: $($found -join ', ')"; exit 1 }
+          'the password is in neither the journey log, the config folder, C:\ProgramData\headless, C:\ProgramData\ssh nor the Winlogon registry key'

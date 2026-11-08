@@ -22,6 +22,10 @@ NIX=/nix/var/nix/profiles/default/bin/nix
 die() { echo "headless: $*" >&2; exit 1; }
 say() { echo "headless: $*"; }
 
+# Which account names LOGIN may be; Windows sets its own.
+LOGIN_PATTERN='^[a-z_][a-z0-9_-]*$'
+LOGIN_RULE="a plain account name"
+
 # load_config DIR: read DIR/headless.env into ADDRESS, LOGIN, SSH_KEY,
 # PASSWORD_REF, TAILSCALE_KEY_REF and TAILSCALE_LOGIN_SERVER, and set the
 # SSH options every step uses.
@@ -38,7 +42,7 @@ load_config() {
   TAILSCALE_LOGIN_SERVER="$(conf TAILSCALE_LOGIN_SERVER)"
   case "$SSH_KEY" in "~/"*) SSH_KEY="$HOME/${SSH_KEY#\~/}" ;; esac
   [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "ADDRESS in headless.env is not a plain address"
-  [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "LOGIN in headless.env is not a plain account name"
+  [[ "$LOGIN" =~ $LOGIN_PATTERN ]] || die "LOGIN in headless.env must be $LOGIN_RULE"
   [ -f "$SSH_KEY" ] && [ -f "$SSH_KEY.pub" ] || die "SSH_KEY $SSH_KEY or its .pub is missing"
   # Every step signs in without prompts, so a key with a passphrase must be
   # loaded in ssh-agent.
@@ -56,8 +60,18 @@ load_config() {
 # on COMMAND: run COMMAND on the machine as LOGIN, by key.
 on() { ssh "${SSH_OPTS[@]}" "$LOGIN@$ADDRESS" "$@"; }
 
+# What first_sign_in and key_works run on the machine. A platform whose
+# shell is not POSIX (Windows) sets its own before calling them.
+# KEY_PROBE: a command that only succeeds. ADD_KEY_COMMAND: adds the public
+# key line it reads on standard input to the account's keys; exit 3 means
+# the account is not an administrator. HOST_KEY_FILE: where the machine
+# keeps its ed25519 host key, for the user to compare.
+KEY_PROBE=true
+ADD_KEY_COMMAND='umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; IFS= read -r k; grep -qxF "$k" ~/.ssh/authorized_keys || printf "%s\n" "$k" >> ~/.ssh/authorized_keys'
+HOST_KEY_FILE=/etc/ssh/ssh_host_ed25519_key.pub
+
 # key_works: true when key sign-in works. need_key: stop unless it does.
-key_works() { [ -s "$KNOWN_HOSTS" ] && on true > /dev/null 2>&1; }
+key_works() { [ -s "$KNOWN_HOSTS" ] && on "$KEY_PROBE" > /dev/null 2>&1; }
 need_key() {
   key_works || die "key sign-in to $LOGIN@$ADDRESS does not work; run connect.sh first"
 }
@@ -76,7 +90,7 @@ first_sign_in() {
       || die "$ADDRESS now shows a different host key than the one pinned in $KNOWN_HOSTS; stop and find out why"
   else
     printf '%s\n' "$scanned" > "$KNOWN_HOSTS"
-    say "pinned host key $(ssh-keygen -lf "$KNOWN_HOSTS" | awk '{ print $2 }') (compare it at the machine with: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)"
+    say "pinned host key $(ssh-keygen -lf "$KNOWN_HOSTS" | awk '{ print $2 }') (compare it at the machine with: ssh-keygen -lf $HOST_KEY_FILE)"
   fi
 
   if key_works; then
@@ -87,7 +101,7 @@ first_sign_in() {
   read_password
   # SSH asks this helper for the password; it prints it from its own
   # environment, never from a command line or a file.
-  local tmp pub
+  local tmp pub rc=0
   tmp="$(mktemp -d)"
   # shellcheck disable=SC2064 # tmp is fixed now
   trap "rm -rf '$tmp'" EXIT
@@ -97,12 +111,24 @@ first_sign_in() {
   printf '%s\n' "$pub" | HEADLESS_ASKPASS_SECRET="$PASSWORD" SSH_ASKPASS="$tmp/askpass" SSH_ASKPASS_REQUIRE=force \
     ssh -o "UserKnownHostsFile=\"$KNOWN_HOSTS\"" -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no \
       -o PreferredAuthentications=password,keyboard-interactive -o NumberOfPasswordPrompts=1 \
-      -o ConnectTimeout=15 -o LogLevel=ERROR "$LOGIN@$ADDRESS" \
-      'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; IFS= read -r k; grep -qxF "$k" ~/.ssh/authorized_keys || printf "%s\n" "$k" >> ~/.ssh/authorized_keys' \
-    || die "password sign-in to $LOGIN@$ADDRESS failed; check the password in $PASSWORD_REF and that SSH allows $LOGIN to sign in with a password"
+      -o ConnectTimeout=15 -o LogLevel=ERROR "$LOGIN@$ADDRESS" "$ADD_KEY_COMMAND" \
+    || rc=$?
+  [ "$rc" != 3 ] || die "$LOGIN on $ADDRESS is not an administrator; the skill needs an administrator account"
+  [ "$rc" != 127 ] || die "$ADDRESS signed $LOGIN in but could not run the command that adds your key; it does not run the system this part of the skill is for"
+  [ "$rc" = 0 ] || die "password sign-in to $LOGIN@$ADDRESS failed; check the password in $PASSWORD_REF and that SSH allows $LOGIN to sign in with a password"
   unset PASSWORD
   key_works || die "your key was added but key sign-in still fails"
   say "added your key to $LOGIN@$ADDRESS; key sign-in works"
+}
+
+# tar_c ARGS...: tar to standard output, without the macOS extended
+# attributes that GNU tar (or Windows' tar) on the machine would warn about.
+tar_c() {
+  if tar --version 2> /dev/null | grep -q bsdtar; then
+    COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -cf - "$@"
+  else
+    tar -cf - "$@"
+  fi
 }
 
 # copy_remote: put the remote step scripts in ~/.headless/remote: the
@@ -146,7 +172,8 @@ as_root() {
 # new_config DIR OPTION...: new-config.sh's work, for each platform's
 # entry point. The caller sets EXTRAS (the platform's extras, all on unless
 # named with --extra-off) and TEMPLATE (a folder whose flake.nix and
-# machine.nix a new config folder starts with, or empty).
+# machine.nix, or the files TEMPLATE_FILES names, a new config folder starts
+# with, or empty).
 new_config() {
   local DIR="${1:?usage: new-config.sh DIR --address ADDRESS --login LOGIN --password-ref REF [options]}"
   shift
@@ -173,7 +200,7 @@ new_config() {
   done
 
   [[ "$ADDRESS" =~ ^[A-Za-z0-9.:_-]+$ ]] || die "--address must be a plain address or name"
-  [[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "--login must be a plain account name"
+  [[ "$LOGIN" =~ $LOGIN_PATTERN ]] || die "--login must be $LOGIN_RULE"
   [ "$LOGIN" != root ] || die "--login must be an admin account other than root"
   [ -n "$PASSWORD_REF" ] || die "--password-ref names the store entry holding the password"
   [ -z "$HOST_NAME" ] || [[ "$HOST_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || die "--host-name must be letters, digits and dashes"
@@ -196,7 +223,7 @@ new_config() {
   esac
 
   if [ -n "$TEMPLATE" ]; then
-    for f in flake.nix machine.nix; do
+    for f in ${TEMPLATE_FILES:-flake.nix machine.nix}; do
       [ -e "$DIR/$f" ] || cp "$TEMPLATE/$f" "$DIR/$f"
     done
   fi
