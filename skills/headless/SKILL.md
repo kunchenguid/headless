@@ -3,6 +3,8 @@ name: headless
 description: Set up a headless Mac (Apple silicon), Linux or Windows machine over SSH, step by step, from "an admin account with a password and SSH on" to a configured machine with key-only SSH, automatic sign-in, never-sleep settings and optional Tailscale - on a Mac with Determinate Nix and nix-darwin, on Linux with a NixOS module (installing NixOS with nixos-anywhere if the user wants) or a distro-neutral script for Debian, Ubuntu and Fedora, on Windows 11 or Windows Server with a rerunnable PowerShell configuration - then restart it and confirm it comes back. Use when the user wants to set up, configure, update or check a headless Mac mini, Linux server, Windows PC or other machine they reach only over SSH. The admin password stays in the user's secret store (Automic Vault, 1Password, Bitwarden, any command, or a private env file); you only ever name the store entry.
 license: MIT
 compatibility: Runs on macOS or Linux with bash, ssh and tar (and Nix, only to install NixOS on a Linux machine). The machine being set up is an Apple silicon Mac on a current macOS (tested on macOS 26), or an x86_64 or aarch64 Linux machine with systemd running NixOS, Debian, Ubuntu or Fedora, or a Windows 11 (Home or Pro) or Windows Server 2025 machine, x86_64 or Arm64 (tested on 26H2 and Server 2025).
+metadata:
+  short-description: "Headless Mac, Linux or Windows setup over SSH, password never seen"
 ---
 
 # headless
