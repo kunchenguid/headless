@@ -320,6 +320,17 @@ function Get-TailscaleAdapterIp {
       Where-Object { $_.InterfaceAlias -like 'Tailscale*' -and $_.IPAddress -like '100.*' })[0].IPAddress)
 }
 
+# What the skill says about a Tailscale another account uses. In server mode
+# that account joined it with Run unattended, and it stays that account's.
+# Otherwise ("already in use by"), it stays that account's after a restart
+# only if that account chose Run unattended; if not, it starts signed out and
+# the account that signs in next, such as this one by automatic sign-in, can
+# join it.
+function Get-TailscaleOwnerNote($ts) {
+  if ($ts.ServerMode) { return "in use by $($ts.Owner), not this account; the skill set it to run unattended as $($ts.Owner)" }
+  return "in use by $($ts.Owner), not this account; the skill set it to run unattended, which keeps it $($ts.Owner)'s only if $($ts.Owner) chose Run unattended; otherwise it signs out at the next restart and tailscale.sh then joins it as this account"
+}
+
 # Tailscale's state: BackendState (Running when connected) and its IPv4.
 # State is unknown when Tailscale does not answer, with its reason in Error;
 # Owner then names the other account Tailscale answers to, if that is why.
@@ -336,7 +347,7 @@ function Get-TailscaleState {
     # in use by X, pid N" or "running in server mode ("X")".
     $owner = ''
     if ($err -match 'already in use by (.+?), pid' -or $err -match 'server mode \("(.+?)"\)') { $owner = $Matches[1] -replace '\\\\', '\' }
-    return @{ State = 'unknown'; Ip = (Get-TailscaleAdapterIp); AuthUrl = ''; Error = "$err"; Owner = $owner }
+    return @{ State = 'unknown'; Ip = (Get-TailscaleAdapterIp); AuthUrl = ''; Error = "$err"; Owner = $owner; ServerMode = [bool]($err -match 'server mode \(') }
   }
   $ip = ''
   if ($st.Self -and $st.Self.TailscaleIPs) { $ip = @($st.Self.TailscaleIPs | Where-Object { $_ -match '^\d+\.' })[0] }

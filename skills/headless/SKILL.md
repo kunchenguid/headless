@@ -375,9 +375,10 @@ can still read it back (say so). Commit the folder afterwards. For
 Tailscale, run `$SKILL/scripts/windows/tailscale.sh ~/headless/pc` as in
 step 6; an existing Tailscale install is kept, and `apply.sh` sets its
 unattended policy so it runs before anyone signs in. One that another
-Windows account joined stays that account's, and the policy makes it run
-unattended as that account; if the user wants the skill to own it,
-ask, then `tailscale.sh ~/headless/pc --uninstall`, `apply.sh` and
+Windows account joined with Run unattended stays that account's; one it
+joined without it signs out at the next restart, and `tailscale.sh` then
+joins it as the skill's account. To have the skill own it sooner, ask,
+then `tailscale.sh ~/headless/pc --uninstall`, `apply.sh` and
 `tailscale.sh` (`references/windows.md`).
 
 **W6. Verify, restart, verify.**

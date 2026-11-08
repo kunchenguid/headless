@@ -44,9 +44,11 @@ as a service and connects at start-up before anyone signs in. An existing
 Tailscale install is kept and not reinstalled; `apply.sh` sets the same
 unattended policy on it (`UnattendedMode` = `always` under
 `HKLM\SOFTWARE\Policies\Tailscale`), so it too runs before anyone signs in.
-Tailscale on Windows answers only the account that joined it; one another
-account joined stays that account's (running unattended as it), and `references/windows.md` says how the
-skill's account can take it over once the user agrees.
+Tailscale on Windows answers only the account that joined it. One that
+another account joined with Run unattended stays that account's; one it
+joined without it signs out at the next restart, and `tailscale.sh` then
+joins it as the skill's account. `references/windows.md` says how the
+skill's account can take it over sooner once the user agrees.
 
 ## Another control server
 

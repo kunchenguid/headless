@@ -101,12 +101,24 @@ so it also runs before anyone signs in. Then `tailscale.sh` joins as on a
 Mac (`references/tailscale.md`).
 
 Tailscale on Windows answers only the account that joined it. If another
-account joined it before the skill, it stays that account's: `apply.sh`
-still sets the unattended policy, so it runs before anyone signs in as
-that account, and the skill does not join it again. `verify.sh` shows `n/a
-Tailscale: in use by ACCOUNT, not this account; the skill set it to run
-unattended as ACCOUNT`, with its address from the Tailscale network
-adapter (or "not connected"), and `tailscale.sh` says the same. If the
+account joined it before the skill, the skill does not join it now, and
+`apply.sh` still sets the unattended policy. What happens at the next
+restart depends on how that account joined:
+
+- With Run unattended on, it stays that account's and runs before anyone
+  signs in. `verify.sh` shows `n/a Tailscale: in use by ACCOUNT, not this
+  account; the skill set it to run unattended as ACCOUNT`.
+- Without it, it starts signed out, and the account that signs in next
+  (the skill's, with automatic sign-in) can join it. Before the restart
+  `verify.sh` shows `n/a Tailscale: in use by ACCOUNT, not this account; the
+  skill set it to run unattended, which keeps it ACCOUNT's only if ACCOUNT
+  chose Run unattended; otherwise it signs out at the next restart and
+  tailscale.sh then joins it as this account`. After the restart it fails
+  with "run tailscale.sh", and `tailscale.sh` joins it as the skill's
+  account.
+
+Each line carries its address from the Tailscale network adapter (or "not
+connected"), and `tailscale.sh` says the same. If the
 user wants the skill's account to own it instead, ask first, then run
 `tailscale.sh DIR --uninstall` over the PC's local network address (not
 its Tailscale one; it refuses a session that comes over Tailscale). It

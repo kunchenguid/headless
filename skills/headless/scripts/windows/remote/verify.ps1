@@ -100,7 +100,7 @@ if ($s.tailscale.enable) {
     elseif ($ts.Owner) {
       $how = 'not connected'
       if ($ts.Ip) { $how = "connected: $($ts.Ip)" }
-      NotApplicable "Tailscale: in use by $($ts.Owner), not this account; the skill set it to run unattended as $($ts.Owner) ($how)"
+      NotApplicable "Tailscale: $(Get-TailscaleOwnerNote $ts) ($how)"
     } elseif ($ts.State -eq 'unknown') { Check $false "Tailscale connected (cannot read it: $($ts.Error))" }
     else { Check $false "Tailscale connected (it is $($ts.State); run tailscale.sh)" }
   }

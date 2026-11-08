@@ -57,8 +57,8 @@ if (-not $on) {
 $ts = Get-TailscaleState
 if ($null -eq $ts) { Fail 'Tailscale is not installed; run apply.sh with Tailscale on first' }
 if ($ts.Owner) {
-  if ($Mode -eq 'state') { $ip = $ts.Ip; if (-not $ip) { $ip = '-' }; "Owned $ip $($ts.Owner)"; exit 0 }
-  Fail "Tailscale here is in use by $($ts.Owner) and answers only that account; the skill does not join it again"
+  if ($Mode -eq 'state') { $ip = $ts.Ip; if (-not $ip) { $ip = '-' }; "Owned $ip $(Get-TailscaleOwnerNote $ts)"; exit 0 }
+  Fail "Tailscale here is $(Get-TailscaleOwnerNote $ts); it answers only $($ts.Owner), so the skill does not join it now"
 }
 if ($ts.State -eq 'unknown') { Fail "cannot read Tailscale's state: $($ts.Error)" }
 if ($Mode -eq 'state') { "$($ts.State) $($ts.Ip)"; exit 0 }
