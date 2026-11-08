@@ -1,78 +1,192 @@
-# headless
+<h1 align="center">/headless</h1>
 
-An agent skill that sets up a headless machine over SSH, step by step: from
-"an admin account with a password and remote login on" to a configured
-machine that never sleeps, signs itself in after a restart, takes SSH keys
-only, and optionally joins Tailscale. The agent never sees the admin
-password: it stays in your secret store (Automic Vault, 1Password,
-Bitwarden, any command, or, as a last resort, a private env file).
+<p align="center">
+  <a href="https://agentskills.io"
+    ><img
+      alt="Agent Skills"
+      src="https://img.shields.io/badge/Agent%20Skills-package-blue?style=flat-square"
+  /></a>
+  <a href="LICENSE"
+    ><img
+      alt="License"
+      src="https://img.shields.io/badge/license-MIT-green?style=flat-square"
+  /></a>
+  <a href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square"
+    ><img
+      alt="Platform"
+      src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat-square"
+  /></a>
+  <a href="https://x.com/kunchenguid"
+    ><img
+      alt="X"
+      src="https://img.shields.io/badge/X-@kunchenguid-black?style=flat-square"
+  /></a>
+  <a href="https://discord.gg/Wsy2NpnZDu"
+    ><img
+      alt="Discord"
+      src="https://img.shields.io/discord/1439901831038763092?style=flat-square&label=discord"
+  /></a>
+</p>
 
-This version covers **Apple silicon Macs**, configured with
-[Determinate Nix](https://determinate.systems) and
-[nix-darwin](https://github.com/nix-darwin/nix-darwin), and **Linux
-machines**: NixOS with this repository's NixOS module; any other
-distribution replaced with NixOS by
-[nixos-anywhere](https://github.com/nix-community/nixos-anywhere) if you
-choose; or, if you keep Debian, Ubuntu or Fedora, a distro-neutral script;
-and **Windows 11 and Windows Server 2025** PCs, configured with a
-rerunnable PowerShell script over OpenSSH.
+<h3 align="center">What if a new machine set itself up while you watched?</h3>
 
-## Install the skill
+A Mac mini in a closet, a Linux box under the desk, a Windows PC nobody sits
+at. Making one run unattended means a dozen settings at the console - never
+sleep, sign in by itself after a restart, SSH keys only - and then, usually,
+handing your agent the admin password so it can do the rest.
+
+**headless** is an [Agent Skill](https://agentskills.io) that takes a machine
+from "an admin account with a password and remote login on" to a configured
+headless machine over SSH, one step at a time: it never sleeps, signs itself
+in after a restart, takes SSH keys only, and optionally joins Tailscale. The
+admin password stays in your secret store; the agent only ever names the
+entry.
+
+- **The password never reaches the agent** - it stays in Automic Vault,
+  1Password, Bitwarden, any command, or, as a last resort, a private env file.
+  The scripts read it and pipe it on; it never lands on a command line or in a
+  log.
+- **Mac, Linux and Windows** - Apple silicon Macs with
+  [Determinate Nix](https://determinate.systems) and
+  [nix-darwin](https://github.com/nix-darwin/nix-darwin); NixOS with this
+  repository's NixOS module, any other distribution replaced with NixOS by
+  [nixos-anywhere](https://github.com/nix-community/nixos-anywhere) if you
+  choose, or Debian, Ubuntu and Fedora kept with a distro-neutral script;
+  Windows 11 and Windows Server 2025 with a rerunnable PowerShell script over
+  OpenSSH.
+- **Every step reruns safely** - each step says what it does, runs, and shows
+  its result; the last step reads every setting back, restarts the machine
+  and checks it comes back.
+- **Proven end to end** - each platform's whole journey runs on a
+  GitHub-hosted runner over SSH to itself, and the logs are checked for the
+  password.
+
+## Quick Start
 
 ```sh
-npx skills add kunchenguid/headless -g
+# install (global recommended)
+$ npx skills add kunchenguid/headless -g
+
+# in your agent
+/headless set up my Mac mini at 192.168.1.20 as a headless machine
 ```
 
-Then ask your agent to set up your machine, for example "set up my Mac mini
-at 192.168.1.20 as a headless machine". For a Mac the skill walks you
-through:
+## What it needs
 
-1. Admin access and Remote Login at the Mac (you, once).
-2. Saving the admin password in your secret store (you, once).
-3. A config folder on your computer, from this repository's default config.
-4. The first SSH sign-in: host key pinned, your key added.
-5. One admin session: Determinate Nix, automatic sign-in.
-6. Applying the config, and Tailscale if you want it.
-7. Reading every setting back, restarting, and checking the Mac comes back.
+- **Your computer:** macOS or Linux with bash, ssh and tar (and Nix, only to
+  install NixOS on a Linux machine).
+- **The machine:** an Apple silicon Mac on a current macOS, an x86_64 or
+  aarch64 Linux machine with systemd, or a Windows 11 or Windows Server 2025
+  PC - with an admin account that has a password, and remote login on.
+- **A secret store** for that password. Tailscale is optional.
+
+## How It Works
+
+For a Mac the skill walks you through seven steps:
+
+```
+admin account + password + Remote Login on
+      │
+      ▼
+┌────────────────────┐
+│ admin access       │  you, once, at the Mac
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ save the password  │  you, once, in your secret store
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ config folder      │  on your computer, from this repository's default config
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ first SSH sign-in  │  host key pinned · your key added
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ admin session      │  Determinate Nix · FileVault off · automatic sign-in
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ apply              │  the config · Tailscale if you want it
+└─────────┬──────────┘
+          ▼
+┌────────────────────┐
+│ verify + restart   │  every setting read back · the Mac comes back
+└─────────┬──────────┘
+          ▼
+  headless Mac
+```
 
 A Linux machine takes the same path, without the admin session: after the
 first sign-in, a machine on NixOS is applied as it is; on another
 distribution you choose between installing NixOS (the whole disk is erased)
-and keeping it with the script. A Windows PC starts with a few lines you
-paste in an administrator PowerShell to turn OpenSSH Server on (and, on a
-home or office network Windows calls Public, to mark it Private so SSH gets
-through the firewall); after the
-first sign-in, applying the config sets key-only SSH, automatic sign-in
-(the password kept as an LSA secret), the extras and Tailscale.
+and keeping it with the script.
 
-## The repository
+A Windows PC starts with a few lines you paste in an administrator
+PowerShell to turn OpenSSH Server on (and, on a home or office network
+Windows calls Public, to mark it Private so SSH gets through the firewall).
+After the first sign-in, applying the config sets key-only SSH, automatic
+sign-in (the password kept as an LSA secret), the extras and Tailscale.
 
-- `skills/headless/`: the skill (`SKILL.md`, `references/`, `scripts/`, and
-  `assets/darwin`, `assets/nixos` and `assets/windows`, the default
-  configs it copies).
-- `modules/darwin/headless.nix`: the nix-darwin module, exported as
-  `darwinModules.headless`. Use it from your own flake:
+## Usage
 
-  ```nix
-  inputs.headless.url = "github:kunchenguid/headless";
-  # in your darwinSystem modules:
-  headless.darwinModules.headless
-  { headless = { user = "admin"; sshKeys = [ "ssh-ed25519 ..." ]; }; }
-  ```
+| Invoke | Example |
+| ------ | ------- |
+| Slash | `/headless set up my Mac mini at 192.168.1.20 as a headless machine` |
+| Natural language | "update my headless Linux server and check it comes back after a restart" |
 
-  Its options are listed in `skills/headless/references/mac.md`.
-- `modules/nixos/headless.nix`: the NixOS module, exported as
-  `nixosModules.headless`, used the same way in a `nixosSystem`. Its
-  options are listed in `skills/headless/references/linux.md`.
-- `templates.darwin` (default) and `templates.nixos`:
-  `nix flake init -t github:kunchenguid/headless#nixos` gives the starting
-  config the skill copies (with a disko disk layout for new installs).
-- `tests/`: the secret helper's test and the Mac, Linux and Windows journeys
-  CI runs.
+The agent should auto-invoke when asked to set up, configure, update or check
+a machine you reach only over SSH.
 
-## Checks
+## Package layout
+
+```
+skills/headless/
+  SKILL.md        # the agent contract: the rules and every step
+  references/     # mac.md · linux.md · windows.md · secrets.md · tailscale.md
+  scripts/        # mac/ · linux/ · windows/: connect, apply, verify, restart, tailscale
+  assets/         # darwin/ · nixos/ · windows/: the default configs the skill copies
+modules/
+  darwin/headless.nix   # the nix-darwin module, darwinModules.headless
+  nixos/headless.nix    # the NixOS module, nixosModules.headless
+flake.nix         # the modules, templates.darwin (default) and templates.nixos
+tests/            # the secret helper's test and the Mac, Linux and Windows journeys CI runs
+```
+
+Ships as an [`npx skills`](https://github.com/vercel-labs/skills) package.
+
+The repository is also a Nix flake, and the modules are the layers the skill
+applies. Use them from your own flake:
+
+```nix
+inputs.headless.url = "github:kunchenguid/headless";
+# in your darwinSystem modules:
+headless.darwinModules.headless
+{ headless = { user = "admin"; sshKeys = [ "ssh-ed25519 ..." ]; }; }
+```
+
+`nixosModules.headless` is used the same way in a `nixosSystem`. The options
+are listed in `skills/headless/references/mac.md` and
+`skills/headless/references/linux.md`.
+`nix flake init -t github:kunchenguid/headless#nixos` (or `#darwin`) gives the
+starting config the skill copies, the NixOS one with a disko disk layout for
+new installs.
+
+## Development
 
 ```sh
+# edit the skill
+$EDITOR skills/headless/SKILL.md
+
+# smoke-test discovery locally
+npx skills add ./ -l
+
+# install from this checkout
+npx skills add ./ -g -y
+
+# checks
 nix flake check                 # modules and default configs build (this system's)
 tests/secret-run.test.sh        # the password is piped, never printed
 shellcheck -x tests/*.sh skills/headless/scripts/*.sh skills/headless/scripts/*/*.sh skills/headless/scripts/*/remote/*.sh
@@ -87,6 +201,8 @@ file parses, then runs the Windows journey on a GitHub-hosted Windows Server
 runner over SSH to itself, from Ubuntu under WSL. Each checks its log never
 holds the password.
 
-## License
-
-MIT
+Pull requests to `main` are raised through
+[no-mistakes](https://github.com/kunchenguid/no-mistakes): the
+`PR must be raised via no-mistakes` check stays red on a pull request opened
+by hand until its branch is pushed through the gate (`git push no-mistakes`),
+which writes a pipeline attestation into the pull request's description.
