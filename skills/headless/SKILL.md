@@ -45,8 +45,8 @@ sharing), that:
    may stay off).
 3. They know its **address**: an IP address or a name such as
    `mac-mini.local` (System Settings > General > Sharing shows it).
-4. **FileVault** is off if they want automatic sign-in (step 5 explains).
-   System Settings > Privacy & Security > FileVault.
+4. **FileVault** may stay on: with automatic sign-in, step 5 turns it off
+   (it has to be off for that) and asks them only if macOS refuses.
 
 Details and screenshots-free wording for each: `references/mac.md`.
 
@@ -86,7 +86,9 @@ already keep a nix-darwin config elsewhere, see "Your own config" below.
 Ask these choices, with the defaults in **bold**:
 
 - Machine name (host name): **keep the current one**, or a new one.
-- Automatic sign-in at start-up: **on** (needs FileVault off).
+- Automatic sign-in at start-up: **on** (needs FileVault off; step 5 turns
+  it off). Say so: the Mac's disk is then no longer protected by the
+  account's password.
 - Tailscale: **off**. Offer it; never require it (step 6). If the Mac already
   has the Tailscale app (`/Applications/Tailscale.app`), keep this off and
   leave the app as it is; `apply.sh` refuses to start a second Tailscale.
@@ -128,9 +130,14 @@ $SKILL/scripts/mac/admin.sh ~/headless/mini
 It installs Determinate Nix (pinned version, checked hash) and, when
 automatic sign-in is on, stores the sign-in password macOS uses at start-up
 (`/etc/kcpassword`, root-only, and recoverable by anyone with root on the
-Mac; say so). If FileVault is on and automatic sign-in is
-chosen, it stops and says so: the user either turns FileVault off at the Mac
-or sets `"autoLogin": false` in `settings.json`.
+Mac; say so). If FileVault is on and automatic sign-in is chosen, it turns
+FileVault off with the same password and waits until the disk has
+decrypted (it can take several minutes; a restart before then would stop
+at FileVault's unlock screen). Only when macOS refuses - the account cannot
+unlock FileVault, or the organization managing the Mac forbids turning it
+off - it stops with a line starting `ask the user:`. Pass that on: the user
+turns FileVault off at the Mac (or has the Mac's managers allow it), or
+sets `"autoLogin": false` in `settings.json`; then run `admin.sh` again.
 
 ## Step 6: Apply the config
 

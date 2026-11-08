@@ -8,13 +8,13 @@
   account, and it is the account that signs in by itself at start-up.
 - **Remote Login on**: System Settings > General > Sharing > Remote Login.
   "Allow access for" must include the account.
-- **FileVault off**, if the user wants automatic sign-in: System Settings >
-  Privacy & Security > FileVault. With FileVault on, macOS waits at its
-  unlock screen after every start-up and nobody is there to type the
-  password; automatic sign-in cannot get past it. The user can keep
-  FileVault on and set `"autoLogin": false`; after a restart the Mac then
-  waits at FileVault's unlock screen until someone types the password there,
-  and may not answer over SSH until then.
+- **FileVault** may be on. With FileVault on, macOS waits at its unlock
+  screen after every start-up and nobody is there to type the password;
+  automatic sign-in cannot get past it. So with automatic sign-in chosen,
+  the admin step turns FileVault off itself (below). The user can instead
+  keep FileVault on and set `"autoLogin": false`; after a restart the Mac
+  then waits at FileVault's unlock screen, where SSH answers but signs in
+  only with the password (key sign-in is refused) until it is unlocked.
 - **Its address**: shown under System Settings > General > Sharing, such as
   `mac-mini.local`, or an IP address from the router.
 
@@ -63,6 +63,38 @@ Cancel closes it.
 Add anything else (packages, more defaults, launchd services) to
 `machine.nix` as ordinary nix-darwin options.
 
+## How the admin step turns FileVault off
+
+With automatic sign-in chosen and FileVault on, `admin.sh`, after installing
+Nix, runs, as root, `fdesetup disable -inputplist` with the account name and
+password in a plist on standard input (never a command line). In order:
+
+1. While FileVault is still encrypting, it waits: macOS refuses to turn it
+   off before then.
+2. If the account is not one `fdesetup list` names (it has no secure token,
+   macOS's mark that its password can unlock the disk), it asks the user.
+   The account made when the Mac was set up has one; an admin made from the
+   command line may not.
+3. It turns FileVault off, then reads `fdesetup status`: `fdesetup` exits 0
+   on most refusals. Anything but "Decryption in progress" or "FileVault is
+   Off" asks the user with macOS's message; a managed Mac whose organization
+   forbids turning FileVault off ("due to managed preferences") asks too. A
+   managed Mac that allows it is treated like any Mac.
+4. It waits until decryption ends and FileVault reports off. A restart
+   before then stops at FileVault's unlock screen. On virtual Macs,
+   decrypting took from 1.5 to 10 minutes; on Apple silicon hardware the
+   disk stays hardware-encrypted, so it should be quicker.
+
+Every "ask the user" line names what the user can do: turn FileVault off at
+the Mac, or set `"autoLogin": false`. Running `admin.sh` again picks up
+where it stopped, including a decryption already under way. Turning off
+this way is not in `fdesetup`'s manual (it documents `-inputplist` for
+turning on), so a later macOS could change it; the ask is the fallback.
+Nix goes in first because, right after FileVault decrypted, macOS could not
+mount the Nix store's new encrypted volume until a restart.
+An organization's device management can turn FileVault back on later;
+`verify.sh` then reports it.
+
 ## Where things go on the Mac
 
 - `~/.headless/config`: the copy of the config folder each apply builds.
@@ -84,9 +116,10 @@ Add anything else (packages, more defaults, launchd services) to
 | `shows a different host key than the one pinned` | The Mac was reinstalled, or something else answers at that address. Find out which before deleting `known_hosts`. |
 | `password sign-in ... failed` | Wrong password in the store, or the account is not allowed under Remote Login. |
 | `is not an administrator` | Use an admin account, or make this one an admin at the Mac. |
-| `FileVault is on` | Turn FileVault off, or set `"autoLogin": false`. |
+| `ask the user: ... FileVault ...` | The admin step could not turn FileVault off; the line says why. The user turns it off at the Mac, or sets `"autoLogin": false`. |
+| `FAIL  FileVault off` | FileVault came back on (often the organization managing the Mac); run `admin.sh` again. |
 | `the system did not build` | An error in `machine.nix` or `settings.json`; the Nix error above names the line. |
-| `did not come back within ... seconds` | The Mac did not answer after the restart. Check it at its screen; with FileVault on it waits for its password. |
+| `did not come back within ... seconds` | The Mac did not answer after the restart. Check it at its screen; with FileVault on it waits at its unlock screen for the password. |
 | `is not signed in on the screen after the restart` | Automatic sign-in did not work: FileVault on, or the password changed since `admin.sh` stored it (run it again). |
 
 ## Removing it

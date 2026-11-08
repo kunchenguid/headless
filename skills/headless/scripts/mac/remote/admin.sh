@@ -30,9 +30,54 @@ IFS= read -r PASSWORD || true
 exec < /dev/null
 [ -n "$PASSWORD" ] || die "no password on standard input"
 
-if [ "$auto_login" = true ] && [ "$(fdesetup isactive 2> /dev/null || true)" = true ]; then
-  die "FileVault is on, and macOS cannot sign in by itself past FileVault's unlock screen. Turn FileVault off in System Settings, or set autoLogin to false in settings.json, then run this again"
-fi
+# Automatic sign-in cannot get past FileVault's unlock screen, so with it
+# chosen this turns FileVault off with the login's password, and asks the
+# user only when macOS refuses. fdesetup reports most refusals with exit 0,
+# so its status afterwards is what counts.
+fv_status() { fdesetup status 2> /dev/null || true; }
+fv_ask() {
+  die "ask the user: $1, or set autoLogin to false in settings.json, then run admin.sh again"
+}
+fv_wait() { # fv_wait TEXT SECONDS: wait while fdesetup status shows TEXT
+  local start=$SECONDS
+  while fv_status | grep -qF "$1"; do
+    [ $((SECONDS - start)) -lt "$2" ] || die "FileVault still shows \"$1\" after $2 seconds; run admin.sh again later"
+    sleep 5
+  done
+}
+turn_filevault_off() {
+  local esc out
+  if fv_status | grep -qF "Encryption in progress"; then
+    say "FileVault is still encrypting; waiting for it to finish first (macOS cannot turn it off before then)"
+    fv_wait "Encryption in progress" 14400
+  fi
+  if ! fv_status | grep -qF "Decryption in progress"; then
+    fdesetup list 2> /dev/null | cut -d, -f1 | grep -qxF "$LOGIN" \
+      || fv_ask "$LOGIN cannot unlock FileVault on this Mac (it has no secure token), so its password cannot turn FileVault off. Turn FileVault off at the Mac (System Settings > Privacy & Security > FileVault) with an account that can"
+    say "FileVault is on; turning it off with $LOGIN's password, so the Mac can sign in by itself"
+    # The plist reaches fdesetup on standard input; printf is a shell
+    # builtin, so the password is on no command line.
+    esc="${PASSWORD//&/&amp;}"; esc="${esc//</&lt;}"; esc="${esc//>/&gt;}"
+    out="$(printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Username</key><string>%s</string><key>Password</key><string>%s</string></dict></plist>\n' "$LOGIN" "$esc" \
+      | fdesetup disable -inputplist 2>&1 || true)"
+    esc=""
+    case "$out" in
+      *"managed preferences"*)
+        fv_ask "the organization that manages this Mac does not allow turning FileVault off (macOS said: $out). Ask whoever manages it to allow that" ;;
+    esac
+    fv_status | grep -qE "Decryption in progress|FileVault is Off" \
+      || fv_ask "macOS did not turn FileVault off (it said: ${out:-nothing}). Turn FileVault off at the Mac (System Settings > Privacy & Security > FileVault)"
+    say "FileVault turned off"
+  fi
+  # The disk decrypts in the background, and FileVault stays on until it
+  # ends; a restart before then stops at its unlock screen.
+  say "waiting for FileVault to finish decrypting (a restart before then stops at its unlock screen)"
+  local start=$SECONDS
+  fv_wait "Decryption in progress" 14400
+  [ "$(fdesetup isactive 2> /dev/null || true)" = false ] \
+    || fv_ask "FileVault is still on after decrypting ($(fv_status | head -n 1)). Turn FileVault off at the Mac (System Settings > Privacy & Security > FileVault)"
+  say "FileVault is off (decryption took $((SECONDS - start)) seconds)"
+}
 
 if [ ! -x "$NIX" ]; then
   say "installing Determinate Nix..."
@@ -44,6 +89,13 @@ if [ ! -x "$NIX" ]; then
   rm -f "$installer"
 fi
 say "$("$NIX" --version)"
+
+# This comes after the Nix install on purpose: right after FileVault
+# decrypts, macOS could not mount a newly made encrypted volume (the Nix
+# store's) until a restart.
+if [ "$auto_login" = true ] && [ "$(fdesetup isactive 2> /dev/null || true)" = true ]; then
+  turn_filevault_off
+fi
 
 if [ "$auto_login" = true ]; then
   # macOS keeps the automatic sign-in password as /etc/kcpassword: the
