@@ -37,8 +37,8 @@ state="$(run_remote tailscale -Mode state < /dev/null | tr -d '\r' | tail -n 1)"
 if [ "${state%% *}" = Owned ]; then
   rest="${state#Owned }" ip="${rest%% *}"
   [ "$ip" = - ] && how="not connected" || how="connected: $ip"
-  say "Tailscale on $ADDRESS is ${rest#* } ($how); it answers only that account, so the skill does not join it now"
-  say "to have $LOGIN own it instead, with the user's yes: tailscale.sh $CONFIG --uninstall, then apply.sh and tailscale.sh"
+  say "Tailscale on $ADDRESS is ${rest#* } ($how); the skill does not join it now"
+  say "to have $LOGIN own it now, with the user's yes: tailscale.sh $CONFIG --uninstall, then apply.sh and tailscale.sh"
   exit 0
 fi
 [ "$state" != off ] || die "Tailscale is off on $ADDRESS; set \"tailscale\": { \"enable\": true } in settings.json and run apply.sh"

@@ -2,9 +2,11 @@
 # the administrator's SSH session.
 #
 # usage: tailscale.ps1 -Mode state            print "STATE IP", "off", or
-#                                             "Owned IP ACCOUNT" (IP - when
+#                                             "Owned IP NOTE" (IP - when
 #                                             none) for a Tailscale another
-#                                             account joined
+#                                             account joined, NOTE being
+#                                             Get-TailscaleOwnerNote's
+#                                             sentence (tailscale.sh prints it)
 #        tailscale.ps1 -Mode uninstall        uninstall Tailscale and its
 #                                             state (once the user agreed)
 #        tailscale.ps1 -Mode key -Server S    join with the auth key on
