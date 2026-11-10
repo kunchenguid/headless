@@ -19,7 +19,7 @@ NIX=/nix/var/nix/profiles/default/bin/nix
 # sudo keeps the login's HOME; root works in its own, so nothing in the
 # login's home becomes root's.
 export HOME=/var/root
-[[ "$LOGIN" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "LOGIN is not a plain account name"
+[[ "$LOGIN" =~ ^[a-z0-9_][a-z0-9_-]*$ ]] || die "LOGIN is not a plain account name"
 dscl . -read "/Users/$LOGIN" UniqueID > /dev/null 2>&1 || die "$LOGIN is not an account on this Mac"
 auto_login="$(plutil -extract autoLogin raw "$HERE/settings.json")"
 
