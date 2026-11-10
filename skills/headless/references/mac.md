@@ -25,7 +25,7 @@ The config folder's `settings.json` holds the module's options
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `user` | (required) | The admin account; nix-darwin's primary user. |
+| `user` | (required) | The admin account; nix-darwin's primary user. Begin with a lowercase letter, digit or underscore (so a digit is valid); remaining characters may also be dashes. |
 | `hostName` | `null` | Computer, local and host name; `null` keeps the current one. |
 | `sshKeys` | your key | Public keys that may sign in, besides `~/.ssh/authorized_keys`. |
 | `keyOnlySsh` | `true` | SSH password, keyboard-interactive and root sign-in off. |
