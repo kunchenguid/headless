@@ -23,7 +23,7 @@ in
 
   options.headless = {
     user = mkOption {
-      type = types.strMatching "[a-z_][a-z0-9_-]*";
+      type = types.strMatching "[a-z0-9_][a-z0-9_-]*";
       description = "The admin account the machine is set up for and signs in to.";
     };
     hostName = mkOption {

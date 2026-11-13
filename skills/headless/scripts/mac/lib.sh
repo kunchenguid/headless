@@ -23,7 +23,7 @@ die() { echo "headless: $*" >&2; exit 1; }
 say() { echo "headless: $*"; }
 
 # Which account names LOGIN may be; Windows sets its own.
-LOGIN_PATTERN='^[a-z_][a-z0-9_-]*$'
+LOGIN_PATTERN='^[a-z0-9_][a-z0-9_-]*$'
 LOGIN_RULE="a plain account name"
 
 # load_config DIR: read DIR/headless.env into ADDRESS, LOGIN, SSH_KEY,
